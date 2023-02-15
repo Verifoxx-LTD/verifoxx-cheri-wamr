@@ -1,3 +1,11 @@
+CHERI-WAMR
+==========
+
+This is a private "fork" of the WebAssembly Micro Runtime Repository which is modified to be CHERI-capability-aware and support features to compartmentalise executed WASM.
+
+Original readme follows below.
+
+
 WebAssembly Micro Runtime
 =========================
 
