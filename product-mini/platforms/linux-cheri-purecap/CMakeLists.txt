@@ -2,6 +2,8 @@
 # CMake script for Linux-Cheri-purecap builds.
 # Use CHERI_PURECAP=1/0 (default 1) for Pure-cap vs hybrid compatibility builds
 # Must set CHERI_GNU_TOOLCHAIN_DIR to location of the GNU toolchain root
+# Use CHERI_STATIC_BUILD=1/0 (default 1) for static linking
+
 
 cmake_minimum_required (VERSION 3.14)
 
@@ -23,6 +25,11 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 # CHERI pure-cap enabled?
 if (NOT DEFINED CHERI_PURECAP)
     set (CHERI_PURECAP 1)
+endif ()
+
+# Static build?
+if (NOT DEFINED CHERI_STATIC_BUILD)
+    set (CHERI_STATIC_BUILD 1)
 endif ()
 
 set (WAMR_BUILD_TARGET AARCH64)
@@ -61,6 +68,15 @@ else ()
     message(STATUS "CHERI hybrid capability mode enabled")
     set (CHERI_ARCH_ABI "-march=morello")
 endif ()
+
+if (CHERI_STATIC_BUILD)
+    message(STATUS "Final link is static")
+    set (CHERI_STATIC_LINK_FLAG "-static")
+else ()
+    message(STATUS "Final link is dyanmic (you will require CRT and C++ stdlib along with all DLLs")
+    set (CHERI_STATIC_LINK_FLAG "")
+endif ()
+
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_ARCH_ABI}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_ARCH_ABI}")
@@ -183,7 +199,7 @@ set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 install (TARGETS iwasm DESTINATION bin)
 
-target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread)
+target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FLAG})
 
 add_library (libiwasm SHARED ${WAMR_RUNTIME_LIB_SOURCE})
 
