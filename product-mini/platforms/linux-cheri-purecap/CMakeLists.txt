@@ -80,7 +80,7 @@ endif ()
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_ARCH_ABI}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_ARCH_ABI}")
-
+set (CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}")
 
 set (WAMR_BUILD_PLATFORM "linux-cheri-purecap")
 
