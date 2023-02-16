@@ -1,3 +1,17 @@
+CHERI LINUX: Build WAMR vmcore (iwasm)
+======================================
+With reference to the below generic instructions under Linux build, proceed as follows.
+
+``` Bash
+cd product-mini/platforms/linux-cheri-purecap
+mkdir build && cd build
+cmake .. -DCHERI_GNU_TOOLCHAIN_DIR=/path/to/arm-morello-gnu/toolchain/root -DCHERI_PURECAP=0|1
+make
+# iwasm is generated under current directory
+```
+
+Note that to build Pure-cap mode set CHERI_PURECAP=1 (default).  For hybrid capability mode set CHERI_PURECAP=0.
+
 
 Build WAMR vmcore (iwasm)
 =========================
