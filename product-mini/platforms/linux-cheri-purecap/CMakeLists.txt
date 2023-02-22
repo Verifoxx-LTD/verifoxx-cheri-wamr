@@ -7,14 +7,10 @@
 
 cmake_minimum_required (VERSION 3.14)
 
-project(wasm NONE)
+project("wasm" NONE)
 
 include(CheckPIESupported)
 include(CMakeForceCompiler)
-
-if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)
-    message(FATAL_ERROR "Must set CHERI_GNU_TOOLCHAIN_DIR to root of the GNU toolchain on the build machine!")
-endif ()
 
 set (CMAKE_SYSTEM_NAME Linux) # this one is important
 set (CMAKE_SYSTEM_VERSION 1) # this one not so much
@@ -47,18 +43,28 @@ endif ()
 set (TOOLCHAIN_PREFIX "aarch64-${CHERI_BUILD_HOST_TARGET}-linux-gnu")
 
 # Set the GNU toolchain builders
-set (CMAKE_C_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-gcc")
-set (CMAKE_CXX_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-g++")
-set (LD_LINKER_NAME "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-ld")
 
-# Search paths
-set (CMAKE_FIND_ROOT_PATH "${CHERI_GNU_TOOLCHAIN_DIR}")
-set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)
+    set (CHERI_GNU_TOOLCHAIN_DIR "")		# Assume would be on path
+else ()
+    # Search paths
+    set (CMAKE_FIND_ROOT_PATH "${CHERI_GNU_TOOLCHAIN_DIR}")
+    set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+    set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+    set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
-message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
-message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
+    message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
+    message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
+endif ()
+
+if (NOT DEFINED CMAKE_C_COMPILER)
+    set (CMAKE_C_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-gcc")
+endif ()
+
+if (NOT_DEFINED_CMAKE_CXX_COMPLIER)
+    set (CMAKE_CXX_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-g++")
+endif ()
+
 
 # Build flags - purecap or not	
 if (CHERI_PURECAP)
@@ -78,8 +84,8 @@ else ()
 endif ()
 
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_ARCH_ABI}")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_ARCH_ABI}")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_ARCH_ABI} -save-temps")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_ARCH_ABI} -save-temps")
 set (CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}")
 
 set (WAMR_BUILD_PLATFORM "linux-cheri-purecap")

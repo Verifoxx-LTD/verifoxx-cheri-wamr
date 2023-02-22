@@ -5,6 +5,109 @@ This is a private "fork" of the WebAssembly Micro Runtime Repository which is mo
 
 Original readme follows below.
 
+## Building CHERI-WAMR with CMake
+
+You can build from the root folder using CMake, with the following commands:
+
+``` Bash
+mkdir build && cd build
+cmake .. WAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/arm-morello-gnu/toolchain/root] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=0|1]
+make
+# iwasm is generated under root/build directory
+```
+
+Where:
+- WAMR_BUILD_PLATFORM is required, for CHERI this must be "linux-cheri-purecap"
+- CHERI_GNU_TOOLCHAIN is path to the morello gnu toolchain root on the build machine, not required if folder containing binaries is on your bash path
+- CHERI_PURECAP is 1 for purecap builds and 0 for hybrid capability builds (default 1)
+- CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring so libs (default 1)
+
+## Building CHERI-WAMR using Visual Studio and WSL2
+The file *CMakePresets.json* is provided to support visual studio C++ CMake remote builds on a Linux Ubuntu machine running under WSL2.
+
+To use this, you will need to have first carried out the following prerequisite steps:
+1. Enable WSL2 in Windows (10 or 11) and installed a suitable Ubuntu distro
+2. Install CMake on the Ubuntu machine, you will need version 3.19 or newer
+3. Set up the Arm Morello GNU Toolchain on your WSL2 distribution for cross-compilation to Morello (i.e linux-x86_64 -> aarch64(+c64))
+4. Add the path to the GNU toolchain binaries (gcc, g++ etc.) to your sign-on bash shell path
+5. Install Visual Studio 2019 or newer with the C++ for Linux / CMake component
+
+### Launching the project
+In Visual Studio, select to open and choose CMake and then locate the *CMakeLists.txt* in the WAMR root folder.  Visual Studio will automatically detect the CMakePresets.json.
+
+You must then select the WSL2 Ubuntu machine as the build target.  You can then choose either "morello-hyrid" or "morello-purecap" as your build configuration.
+
+All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
+
+### Troubleshooting
+1. If your project is located on a virtual drive under windows (i.e a subst drive) then you will have to make this available to WSL2.  Although most files are copied to WSL2 via *rsync*, the Ubuntu installation will still need your virtual drive mounted (i.e available as */mnt/drive_letter*).
+
+There are a number of ways to do this, but by far the easiest is to create a symbolic link.  For example, assuming your windows substituted drive is N: which maps to C:\Verifoxx then proceed as follows on Ubunutu:
+
+``` Bash
+sudo ln -s /mnt/c/Verifoxx /mnt/n
+```
+
+2. You should ensure your .bashrc is able to be executed in "headless" mode i.e when there is no terminal.  The easiest way to achieve this is to add the following line near the top of your .bashrc:
+
+``` Bash
+[[ $- != *i* ]] && return
+```
+
+3. You are recommended to add the path to the toolchain binaries to your .bashrc file.  *Ensure this is BEFORE the line shown in the no terminal mode, above.*  However it can be supplied by modifying CMakePresets.json.  The problem though with this is it will reduce the portability of the project.
+
+### Debugging on Morello Board with Visual Studio
+You can remotely debug from Visual Studio with the target being the Morello board.  However, this requires some setup because the debug target is not the same as the build target.
+
+You can either run gdb on the morello board, or run gdbserver on the morello board and gdb locally.  The former is recommended, not least as there were some issues with gdbserver on morello-aarch64+c64 at the time of writing.  This is the method described below.
+
+#### Prerequisites
+1. The Morello board must have a known IP address on the internal network (e.g configure it with a static IP)
+2. The Morello board should be running sshd and accept remote connections
+3. You may need to enable connections in your firewall
+
+#### Visual Studio Setup
+1. In Tools -> Options, add a remote connection.  You will need to supply the IP address of the morello board along with the login credentials (user="root", pass="morello").
+2. Once a build has succeeded, under Debug configure a launch configuration.  This will open a file *launch.vs.json* which you must then edit to resemble the below:
+
+``` JSON
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "args": [],
+      "comment": "Learn how to configure WSL debugging. For more info, see http://aka.ms/vslinuxdebug",
+      "cwd": "/root",
+      "debuggerConfiguration": "gdb",
+      "env": {},
+      "gdbPath": "/root/morello_gnu/bin/aarch64-none-linux-gnu-gdb",
+      "name": "Morello Target",
+      "project": "CMakeLists.txt",
+      "projectTarget": "cheri-wamr",
+      "remoteMachineName": "192.168.0.39",
+      "type": "cppgdb",
+      "targetArchitecture": "arm64"
+    }
+  ]
+}
+```
+
+Where:
+- *cwd* is the working folder for debug session
+- *debuggerConfiguration* should be gdb
+- *gdbPath* is the filepath for the gdb binary.  Version shown above is built for the morello board (i.e runs on morello).
+- *name* and *projectTarget* set to appropriate for your project configuration
+- *remoteMachineName* is the IP address of the Arm morello board
+- *targetArchitecture* must be an architecture known to visual studio; the nearest we can get is "arm64"
+- *name* is the debug target name to display in the debug target selection box.
+
+You can now proceed to select debug target as per *name*, above, and then debug.  The process will launch remotely on the Morello board connecting across your internal network.
+
+
+
+
+
 
 WebAssembly Micro Runtime
 =========================

@@ -5,6 +5,11 @@ set (PLATFORM_SHARED_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 add_definitions(-DBH_PLATFORM_LINUX_CHERI_PURECAP)
 
+if (CHERI_PURECAP)
+    add_compile_definitions(ENABLE_CHERI_PURECAP=1)
+endif ()
+
+
 include_directories(${PLATFORM_SHARED_DIR})
 include_directories(${PLATFORM_SHARED_DIR}/../include)
 

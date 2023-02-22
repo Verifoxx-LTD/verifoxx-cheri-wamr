@@ -1,0 +1,60 @@
+﻿{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 18,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "morello-hybrid",
+      "displayName": "Morello Hybrid Cap",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/install/${presetName}",
+      "cacheVariables": {
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "aarch64-none-linux-gnu-gcc",
+        "CMAKE_CXX_COMPILER": "aarch64-none-linux-gnu-g++",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+        "CHERI_PURECAP": "0"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-arm",
+          "intelliSenseOptions": { "useCompilerDefaults": true }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-arm",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out"],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "inherits": "morello-hybrid",
+      "name": "morello-purecap",
+      "displayName": "Morello PureCap",
+      "cacheVariables": {
+        "CHERI_PURECAP": "1",
+        "WAMR_BUILD_INVOKE_NATIVE_GENERAL": "1"
+      }
+    }
+  ]
+}
