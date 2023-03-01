@@ -5,6 +5,11 @@
 
 #include "platform_api_vmcore.h"
 
+#ifdef ENABLE_CHERI_PURECAP
+#include <sys/mman.h>
+#include "bh_log.h"
+#endif
+
 #ifndef BH_ENABLE_TRACE_MMAP
 #define BH_ENABLE_TRACE_MMAP 0
 #endif
@@ -128,9 +133,22 @@ os_mmap(void *hint, size_t size, int prot, int flags)
     if (addr == MAP_FAILED) {
         /* try 5 times */
         for (i = 0; i < 5; i++) {
+
+#ifdef ENABLE_CHERI_PURECAP
+            // For CHERI pure-cap we must request full access and use mprotect to adjust
+            // Otherwise the capability returned has no r/w/x permissions
+			LOG_DEBUG("CHERI-PURECAP mode calls mmap() with full access and mprotect() with flags: %x\n", map_prot);
+            addr = mmap(hint, request_size, PROT_READ|PROT_WRITE|PROT_EXEC, map_flags, -1, 0);
+            if ((size_t)addr != MAP_FAILED) {
+                if (MAP_FAILED != (size_t)mprotect(addr, request_size, map_prot))
+					break;
+            }
+
+#else
             addr = mmap(hint, request_size, map_prot, map_flags, -1, 0);
             if (addr != MAP_FAILED)
                 break;
+#endif
         }
     }
 
@@ -212,11 +230,15 @@ os_munmap(void *addr, size_t size)
     uint64 request_size = (size + page_size - 1) & ~(page_size - 1);
 
     if (addr) {
+
         if (munmap(addr, request_size)) {
+
             os_printf("os_munmap error addr:%p, size:0x%" PRIx64 ", errno:%d\n",
                       addr, request_size, errno);
+
             return;
         }
+
 #if BH_ENABLE_TRACE_MMAP != 0
         total_size_munmapped += request_size;
         os_printf("munmap %p with size: %zu, total_size_mmapped: %zu, "

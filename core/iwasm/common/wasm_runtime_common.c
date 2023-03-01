@@ -4099,8 +4099,19 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            uint32 *argv_ret)
 {
     WASMModuleInstanceCommon *module = wasm_runtime_get_module_inst(exec_env);
-    uint64 argv_buf[32] = { 0 }, *argv1 = argv_buf, *ints, *stacks, size,
-           arg_i64;
+
+#if ENABLE_CHERI_PURECAP
+    uint64 argv_buf[34] __attribute__((aligned(16))) = {0}; // Extra space for purecap (+8 for cptr and further 8 for alignment)
+#else
+    uint64 argv_buf[32] = { 0 };        // Space for all arguments
+#endif
+
+    uint64 *argv1 = argv_buf;           // Buffer to pass all arguments
+    uint64 *ints;                       // Integers part of arg_buf
+    uint64 *stacks;                     // Stacks part of arg_buf
+    
+    uint64 size, arg_i64;
+
     uint32 *argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;
     uint32 arg_i32, ptr_len;
     uint32 result_count = func_type->result_count;
@@ -4111,7 +4122,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 #endif
 #ifndef BUILD_TARGET_RISCV64_LP64
 #if WASM_ENABLE_SIMD == 0
-    uint64 *fps;
+    uint64 *fps;                        // Floats part of arg_buf
 #else
     v128 *fps;
 #endif
@@ -4140,6 +4151,25 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
         }
     }
 
+
+#if ENABLE_CHERI_PURECAP
+    // Set up argv pointers for CHERI purecap
+    // Note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8
+    // The structure is different than other targets, and is:
+    // argv[0..1]   : CPtr exec_env (128-bit)
+    // argv[2..9]  : fps
+    // argv[10..17] : ints
+    // argv[18..33] : stack args
+
+    WASMExecEnv **argv1_p = (WASMExecEnv **)argv1;
+
+    *argv1_p = exec_env;
+
+    fps = &argv1[2];
+    ints = fps + MAX_REG_FLOATS;
+    stacks = ints + MAX_REG_INTS;
+#else
+
 #ifndef BUILD_TARGET_RISCV64_LP64
 #if WASM_ENABLE_SIMD == 0
     fps = argv1;
@@ -4154,6 +4184,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     stacks = ints + MAX_REG_INTS;
 
     ints[n_ints++] = (uint64)(uintptr_t)exec_env;
+#endif /* ENABLE_CHERI_PURECAP */
 
     for (i = 0; i < func_type->param_count; i++) {
         switch (func_type->types[i]) {
