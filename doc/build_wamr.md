@@ -1,50 +1,13 @@
 CHERI LINUX: Build WAMR vmcore (iwasm)
 ======================================
-With reference to the below generic instructions under Linux build, proceed as follows.
+Please refer to the root [ReadMe](../ReadMe.md) for full instructions on how to build.
 
-``` Bash
-cd product-mini/platforms/linux-cheri-purecap
-mkdir build && cd build
-cmake .. [-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/arm-morello-gnu/toolchain/root] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=0|1]
-make
-# iwasm is generated under current directory
-```
-
-## Flags and Settings
-You can either build from the root folder or from the *product_mini/platforms/linux-cheri-purecap* folder.
-The Morello GNU toolchain is required.  Either the binaries must be on your path, or you must pass CHERI_GNU_TOOLCHAIN_DIR to cmake to supply the root of the GNU toolchain.
-
-To build Pure-cap mode set CHERI_PURECAP=1 (default).  For hybrid capability mode set CHERI_PURECAP=0.
-
-By default, iwasm is statically linked (CHERI_STATIC_BUILD=1).  This is because it is likely pure-cap standard libraries won't be available on morello.
-To dynamically link, use CHERI_STATIC_BUILD=0.  You will then need to copy all DLLs built as part of the iwasm build onto the target (if building on the host).
-
-### Building from the root folder
-CMakeLists.txt in the root folder will use the WAMR_BUILD_PLATFORM define in order to identify the correct platform folder's CMakeLists.txt to run.  Therefore to build from the root folder, the command would be as follows:
-
-``` Bash
-mkdir build && cd build
-cmake .. WAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/arm-morello-gnu/toolchain/root] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=0|1]
-make
-# iwasm is generated under root/build directory
-```
-
-**NOTE: You can use any valid platform in the above command**
-
-
-## Cross-compilation
-The makefile will automatically detect if it is being built on the target or on a host machine (cross-compilation).
-If the architecure where it is being run is aarc64 then it is assumed to be building on the morello target.
-Otherwise, it will cross-compile.
-
-The correct GNU toolchain is then resolved from the build machine setting.
-
-Original document follows below.
+Note that all options are applicable for building from the root folder, or from building directly within the *product-mini/platforms/linux-cheri-purecap* folder.
 
 
 
-Build WAMR vmcore (iwasm)
-=========================
+ORIGINAL DOCUMENT -> Build WAMR vmcore (iwasm)
+==============================================
 It is recommended to use the [WAMR SDK](../wamr-sdk) tools to build a project that integrates the WAMR. This document introduces how to build the WAMR minimal product which is vmcore only (no app-framework and app-mgr) for multiple platforms.
 
 ## WAMR vmcore cmake building configurations

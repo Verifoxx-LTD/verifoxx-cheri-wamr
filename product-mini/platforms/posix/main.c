@@ -778,6 +778,6 @@ fail1:
     /* destroy runtime environment */
     wasm_runtime_destroy();
 
-    LOG_DEBUG("WAMR Exits with return code %d!\n", ret);
+    LOG_FATAL("WAMR Exits with return code %d!\n", ret);
     return ret;
 }
