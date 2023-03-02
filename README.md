@@ -2,40 +2,80 @@ CHERI-WAMR
 ==========
 
 This is a private "fork" of the WebAssembly Micro Runtime Repository which is modified to be CHERI-capability-aware and support features to compartmentalise executed WASM.
+The version in "main" will build the iwasm program (VM Core) for both CHERI Hybrid and pure-cap on Linux.
+However note the pure-cap version is very cut down and is likely to only run the simplest WASM code!
 
-Original readme follows below.
+The version in "sandbox" is latest bleeding-edge changes intended to try and fix various issues that cause CHERI capability faults.
+
 
 ## Building CHERI-WAMR with CMake
+You can build from the root folder directly with CMake, but this requires a number of flags to configure WAMR and the build system.
+It is therefore recommended to consult *./build_iwasm.sh* which allows you to configure the following:
+- CHERI_PURECAP=[0|1]		(set to 1 for purecap mode, 0 for hybrid)
+- CONFIG_TYPE=Debug|Release
+- INSTALL_PREFIX=<install folder>	(where you want output to be written from cmake *--install*)
 
-You can build from the root folder using CMake, with the following commands:
+This bash script assumes you will be using a toolchain file, see below for more on tihs.
 
+### The Toolchain File
+The Cmake build can use the toolchain file *toolchain.cmake*.  You should edit this file accordingly to specify the path to the GCC and GCC compiler binaries.
+The default provided assumes that their location is on your path.
+
+To use the toolchain file you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain.
+
+**Use of the toolchain file is optional**.  If you do not use the toolchain file, the cmakelists.txt will attempt to resolve your GNU compilers based on the architecture you are running on.
+If this is aarch64 then it assumes you are building on the morello board.  Otherwise, it assumes you are cross-compiling.
+
+You will though need to provide the path to the GNU toolchain root, if they are not on your path.
+You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* as a Cmake argument.
+
+### Building without the bash script
 ``` Bash
 mkdir build && cd build
-cmake .. WAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/arm-morello-gnu/toolchain/root] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=0|1]
-make
-# iwasm is generated under root/build directory
+cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> -DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [<wamr-build-flags>]
+
+cmake --build .
+cmake --install .
 ```
 
 Where:
 - WAMR_BUILD_PLATFORM is required, for CHERI this must be "linux-cheri-purecap"
-- CHERI_GNU_TOOLCHAIN is path to the morello gnu toolchain root on the build machine, not required if folder containing binaries is on your bash path
+- CHERI_GNU_TOOLCHAIN_DIR is path to the morello gnu toolchain root on the build machine, not required if folder containing binaries is on your bash path OR you are using a toolchain file
 - CHERI_PURECAP is 1 for purecap builds and 0 for hybrid capability builds (default 1)
-- CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring so libs (default 1)
+- CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring .so libs (default 1)
+- <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).  Note that for purecap we currently have minimal spec of disabling AOT, SIMD and enabling Fast Interp
+
+### Bulding on the Morello Target
+This document assumes you will be cross-compiling, however you can build on the Morello target itself.
+To do this *either* update the *toolchain.cmake* file *or* supply the CHERI_GNU_TOOLCHAIN_DIR flag if the GNU toolchain is not on your path (on the Morello board).
+The cmake script will then resolve the correct toolchain binaries, as if the architecure where it is being run is aarch64 then it is assumed to be building on the morello target.
+Otherwise, it will cross-compile.
+
 
 ## Building CHERI-WAMR using Visual Studio and WSL2
 The file *CMakePresets.json* is provided to support visual studio C++ CMake remote builds on a Linux Ubuntu machine running under WSL2.
+This provides separate configurations for:
+- Hybrid Debug
+- PureCap Debug
+- Hybrid Release
+- PureCap Release
 
-To use this, you will need to have first carried out the following prerequisite steps:
+To use VS with CMake and this project "out of the box" you will need to have first carried out the following pre-requisite steps:
 1. Enable WSL2 in Windows (10 or 11) and installed a suitable Ubuntu distro
-2. Install CMake on the Ubuntu machine, you will need version 3.19 or newer
+2. Install CMake on the Ubuntu machine, you will need version 3.19 or newer (note: not 100% guaranteed to work with earlier than 3.24!)
 3. Set up the Arm Morello GNU Toolchain on your WSL2 distribution for cross-compilation to Morello (i.e linux-x86_64 -> aarch64(+c64))
-4. Add the path to the GNU toolchain binaries (gcc, g++ etc.) to your sign-on bash shell path
+4. Add the path to the GNU toolchain binaries (gcc, g++ etc.) to your sign-on bash shell path (e.g in .bashrc)
+5. Add *export CHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/toolchain/root* to your sign-on bash shell path (e.g in .bashrc)
 5. Install Visual Studio 2019 or newer with the C++ for Linux / CMake component
 
 ### Launching the project
 In Visual Studio, select to open and choose CMake and then locate the *CMakeLists.txt* in the WAMR root folder.  Visual Studio will automatically detect the CMakePresets.json.
 
-You must then select the WSL2 Ubuntu machine as the build target.  You can then choose either "morello-hyrid" or "morello-purecap" as your build configuration.
+You must then select the your Ubuntu machine as the build target.  You can then choose your configuration, the following are available:
+- Debug armC64 Hybrid		(internal name "ARMc64-hybrid-debug")
+- Debug armC64+ PureCap		(internal name "ARMc64-PureCap-debug")
+- Release armC64 Hybrid		(internal name "ARMc64-hybrid-release")
+- Release armC64+ PureCap	(internal name "ARMc64-PureCap-release")
 
 All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
 
@@ -55,6 +95,8 @@ sudo ln -s /mnt/c/Verifoxx /mnt/n
 ```
 
 3. You are recommended to add the path to the toolchain binaries to your .bashrc file.  *Ensure this is BEFORE the line shown in the no terminal mode, above.*  However it can be supplied by modifying CMakePresets.json.  The problem though with this is it will reduce the portability of the project.
+
+**Note: The CMakePresets.json is set up with the correct WAMR options to build a version that works with the simple WASM file**
 
 ### Debugging on Morello Board with Visual Studio
 You can remotely debug from Visual Studio with the target being the Morello board.  However, this requires some setup because the debug target is not the same as the build target.
@@ -104,13 +146,20 @@ Where:
 
 You can now proceed to select debug target as per *name*, above, and then debug.  The process will launch remotely on the Morello board connecting across your internal network.
 
+#### Debugging and Intellisense Operation
+There are limitations to how well intellisense and debugging can work with Visual Studio, because it has to be told the architecture is Arm64 and it doesn't know about Morello.
+
+However, the CMakePresets.json has been specifically set up - and this is why it also needs to use a toolchain file - to make the process as effective as possible:
+- C and C++ headers will be picked up from the GNU toolchain on the Linux machine, not the VS local flavour
+- C/C++ flags and built-in macro definitions should work in Intellisense, for example __CHERI_PURE_CAPABILITY__ is defined for morello pure-cap.
+- Debugging should work fairly seamlessly although you are unlikely to be able to debug into library functions and e.g STL headers (this feature can be enabled/disabled in VS Tools -> Options)
+
+The only real problem is that compiler builtins which are pure-cap specific will likely not work.
 
 
 
-
-
-WebAssembly Micro Runtime
-=========================
+ORIGINAL DOCUMENT -> WebAssembly Micro Runtime
+==============================================
 
 **A [Bytecode Alliance][BA] project**
 

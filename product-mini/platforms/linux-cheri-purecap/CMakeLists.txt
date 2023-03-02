@@ -30,6 +30,9 @@ endif ()
 
 set (WAMR_BUILD_TARGET AARCH64)
 
+# If a toolchain file has not been used, try and figure out the toolchain based on
+# CHERI_GNU_TOOLCHAIN_DIR and the machine architecture
+
 # Figure out the toolchain prefix depending on whether we are on an aarch64 host or not
 # If not we are doing cross-compilation, if so we are on the target
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)")
@@ -55,6 +58,11 @@ else ()
 
     message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
     message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
+
+    if (NOT DEFINED CMAKE_SYS_ROOT)
+        set(CMAKE_SYS_ROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
+        message(STATUS "CMAKE_SYS_ROOT=${CHERI_GNU_TOOLCHAIN_DIR}")
+    endif ()
 endif ()
 
 if (NOT DEFINED CMAKE_C_COMPILER)
@@ -66,29 +74,39 @@ if (NOT_DEFINED_CMAKE_CXX_COMPLIER)
 endif ()
 
 
-# Build flags - purecap or not	
+if (NOT DEFINED CHERI_COMPILER_FLAGS)
+    set (CHERI_COMPILER_FLAGS "")
+else ()
+    message(STATUS "Initial compiler flags passed in: ${CHERI_COMPILER_FLAGS}")
+endif ()
+
+# Set Build flags for the targetted architecture
 if (CHERI_PURECAP)
     message(STATUS "CHERI pure-cap mode enabled")
-    set (CHERI_ARCH_ABI "-march=morello+c64 -mabi=purecap")
+    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")# -fpack-struct=16 -mstrict-align ")
 else ()
     message(STATUS "CHERI hybrid capability mode enabled")
-    set (CHERI_ARCH_ABI "-march=morello")
+    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
 endif ()
 
 if (CHERI_STATIC_BUILD)
     message(STATUS "Final link is static")
-    set (CHERI_STATIC_LINK_FLAG "-static")
+    set (CHERI_STATIC_LINK_FINAL "-static")
 else ()
     message(STATUS "Final link is dyanmic (you will require CRT and C++ stdlib along with all DLLs")
-    set (CHERI_STATIC_LINK_FLAG "")
+    set (CHERI_STATIC_LINK_FINAL "")
 endif ()
 
+# Final common compiler flags adds options to save build files and set the __FILE__ mapping folder
+set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -save-temps -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
 
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_ARCH_ABI} -save-temps")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_ARCH_ABI} -save-temps")
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_COMPILER_FLAGS}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_COMPILER_FLAGS}")
 set (CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}")
 
-set (WAMR_BUILD_PLATFORM "linux-cheri-purecap")
+if (NOT DEFINED WAMR_BUILD_PLATFORM)
+    set (WAMR_BUILD_PLATFORM "linux-cheri-purecap")
+endif ()
 
 # Reset default linker flags
 set (CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
@@ -96,20 +114,19 @@ set (CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
 set (CMAKE_C_STANDARD 99)
 
-if (NOT CMAKE_BUILD_TYPE)
+enable_language(C CXX)
+
+if (NOT DEFINED CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif ()
+message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 
-enable_language(C CXX)
+######## Reminder of this file contains same content as ../linux/CMakeLists.txt
+### NOTE: Configure minimal set of features as needed
 
 if (NOT DEFINED WAMR_BUILD_INTERP)
   # Enable Interpreter by default
   set (WAMR_BUILD_INTERP 1)
-endif ()
-
-if (NOT DEFINED WAMR_BUILD_FAST_INTERP)
-  # Enable fast interpreter
-  set (WAMR_BUILD_FAST_INTERP 1)
 endif ()
 
 if (NOT DEFINED WAMR_BUILD_AOT)
@@ -129,12 +146,17 @@ endif ()
 
 if (NOT DEFINED WAMR_BUILD_LIBC_BUILTIN)
   # Enable libc builtin support by default
-  set (WAMR_BUILD_LIBC_BUILTIN 0)		# Disable libc builtin
+  set (WAMR_BUILD_LIBC_BUILTIN 1)
 endif ()
 
 if (NOT DEFINED WAMR_BUILD_LIBC_WASI)
   # Enable libc wasi support by default
   set (WAMR_BUILD_LIBC_WASI 1)
+endif ()
+
+if (NOT DEFINED WAMR_BUILD_FAST_INTERP)
+  # Enable fast interpreter
+  set (WAMR_BUILD_FAST_INTERP 1)
 endif ()
 
 if (NOT DEFINED WAMR_BUILD_MULTI_MODULE)
@@ -154,7 +176,7 @@ endif ()
 
 if (NOT DEFINED WAMR_BUILD_SIMD)
   # Enable SIMD by default
-  set (WAMR_BUILD_SIMD 0)	# Disable for morello
+  set (WAMR_BUILD_SIMD 1)
 endif ()
 
 if (NOT DEFINED WAMR_BUILD_REF_TYPES)
@@ -198,14 +220,17 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wformat -Wformat-securit
 
 include (${SHARED_DIR}/utils/uncommon/shared_uncommon.cmake)
 
-add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE})
+add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE} ${VERIFOXX_UTILS_INCS})
 
 check_pie_supported()
-set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON LINKER_LANGUAGE CXX)
+set_property(TARGET iwasm PROPERTY CXX_STANDARD 11)
+
+target_link_options(iwasm PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker iwasm.map")
 
 install (TARGETS iwasm DESTINATION bin)
 
-target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FLAG})
+target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} ${VERIFOXX_UTILS_LIB} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FINAL})
 
 add_library (libiwasm SHARED ${WAMR_RUNTIME_LIB_SOURCE})
 

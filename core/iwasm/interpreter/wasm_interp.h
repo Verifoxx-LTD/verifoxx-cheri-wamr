@@ -75,12 +75,23 @@ wasm_interp_interp_frame_size(unsigned all_cell_num)
 {
     unsigned frame_size;
 
+
+#if ENABLE_CHERI_PURECAP
+#if WASM_ENABLE_FAST_INTERP == 0
+    frame_size = (uint32)offsetof(WASMInterpFrame, lp) + all_cell_num * 16; // Alignment
+#else
+    frame_size = (uint32)offsetof(WASMInterpFrame, operand) + all_cell_num * 16;    // Alignment
+#endif
+    return align_uint(frame_size, 16);
+
+#else
 #if WASM_ENABLE_FAST_INTERP == 0
     frame_size = (uint32)offsetof(WASMInterpFrame, lp) + all_cell_num * 4;
 #else
     frame_size = (uint32)offsetof(WASMInterpFrame, operand) + all_cell_num * 4;
 #endif
     return align_uint(frame_size, 4);
+#endif
 }
 
 void
