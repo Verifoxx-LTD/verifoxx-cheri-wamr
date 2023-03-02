@@ -2,23 +2,28 @@
   "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 18,
+    "minor": 19,
     "patch": 0
   },
   "configurePresets": [
     {
-      "name": "morello-hybrid",
-      "displayName": "Morello Hybrid Cap",
+      "name": "ARMc64-hybrid-debug",
+      "displayName": "Debug armC64 Hybrid",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/install/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
-        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "aarch64-none-linux-gnu-gcc",
-        "CMAKE_CXX_COMPILER": "aarch64-none-linux-gnu-g++",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
-        "CHERI_PURECAP": "0"
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "CHERI_PURECAP": "0",
+		"CHERI_STATIC_BUILD": "1",
+		"CHERI_COMPILER_FLAGS": "-fpack-struct=16 -mstrict-align",
+		"WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+		"WAMR_BUILD_AOT": "0",
+		"WAMR_BUILD_LIBC_BUILTIN": "1",
+		"WAMR_BUILD_FAST_INTERP": "0",
+		"WAMR_BUILD_SIMD": "0"
       },
       "condition": {
         "type": "equals",
@@ -29,7 +34,10 @@
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": "Linux",
           "intelliSenseMode": "linux-gcc-arm",
-          "intelliSenseOptions": { "useCompilerDefaults": true }
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true,
+            "additionalCompilerArgs": ["-march=morello"]
+          }
         },
         "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
           "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
@@ -40,7 +48,7 @@
           "copyOptimizations": { "maxSmallChange": 0 },
           "copyExcludeDirectoriesList": [],
           "copySourcesOptions": {
-            "exclusionList": [ ".vs", ".git", "out"],
+            "exclusionList": [ ".vs", ".git", "out" ],
             "outputVerbosity": "Normal",
             "method": "rsync"
           }
@@ -48,13 +56,41 @@
       }
     },
     {
-      "inherits": "morello-hybrid",
-      "name": "morello-purecap",
-      "displayName": "Morello PureCap",
+      "inherits": "ARMc64-hybrid-debug",
+      "name": "ARMc64-PureCap-debug",
+      "displayName": "Debug armC64+ PureCap",
+      "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
-        "CHERI_PURECAP": "1",
-        "WAMR_BUILD_INVOKE_NATIVE_GENERAL": "1"
+        "CHERI_PURECAP": "1"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-arm",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true,
+            "additionalCompilerArgs": [ "-march=morello+c64", "-mabi=purecap" ]
+          }
+        }
       }
-    }
+    },
+        {
+          "inherits": "ARMc64-hybrid-debug",
+          "name": "ARMc64-hybrid-release",
+          "displayName": "Release armC64 Hybrid",
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "NDEBUG": "1"
+          }
+        },
+        {
+          "inherits": "ARMc64-PureCap-debug",
+          "name": "ARMc64-PureCap-release",
+          "displayName": "Release armC64+ PureCap",
+          "cacheVariables": {
+            "CMAKE_BUILD_TYPE": "Release",
+            "NDEBUG": "1"
+          }
+        }
   ]
 }
