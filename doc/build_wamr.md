@@ -1,6 +1,6 @@
 CHERI LINUX: Build WAMR vmcore (iwasm)
 ======================================
-Please refer to the root [ReadMe](../ReadMe.md) for full instructions on how to build.
+Please refer to the root [ReadMe](../README.md) for full instructions on how to build.
 
 Note that all options are applicable for building from the root folder, or from building directly within the *product-mini/platforms/linux-cheri-purecap* folder.
 
