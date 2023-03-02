@@ -19,7 +19,11 @@
 extern "C" {
 #endif
 
+#if ENABLE_CHERI_PURECAP
+#define GC_HEAD_PADDING 16  // Preserve alignment
+#else
 #define GC_HEAD_PADDING 4
+#endif
 
 #define NULL_REF ((gc_object_t)NULL)
 
