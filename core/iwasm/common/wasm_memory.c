@@ -8,6 +8,11 @@
 #include "bh_platform.h"
 #include "mem_alloc.h"
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
+
 typedef enum Memory_Mode {
     MEMORY_MODE_UNKNOWN = 0,
     MEMORY_MODE_POOL,
@@ -66,7 +71,7 @@ wasm_memory_init_with_allocator(void *_user_data, void *_malloc_func,
     return false;
 }
 #else
-static bool
+bool
 wasm_memory_init_with_allocator(void *_malloc_func, void *_realloc_func,
                                 void *_free_func)
 {
@@ -359,12 +364,24 @@ wasm_runtime_addr_app_to_native(WASMModuleInstanceCommon *module_inst_comm,
         return NULL;
     }
 
-    addr = memory_inst->memory_data + app_offset;
+#ifdef ENABLE_CHERI_PURECAP
+    LOG_WARNING("wasm_runtime_addr_app_to_native(): Returning WASM capability to native, to do protect this!");
+    addr = memory_inst->memory_data + (size_t)app_offset;
 
+    if (cheri_base_get(memory_inst->memory_data) == cheri_base_get(memory_inst->memory_data_end)
+        && cheri_offset_get(addr) < cheri_offset_get(memory_inst->memory_data_end))
+    {
+        return addr;
+    }
+#else
+
+    addr = memory_inst->memory_data + app_offset;
     if (memory_inst->memory_data <= addr && addr < memory_inst->memory_data_end)
         return addr;
 
+#endif
     return NULL;
+
 }
 
 uint32

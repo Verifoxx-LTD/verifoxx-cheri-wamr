@@ -285,7 +285,7 @@ runtime_exception_handler(EXCEPTION_POINTERS *exce_info)
 }
 #endif /* end of BH_PLATFORM_WINDOWS */
 
-static bool
+bool
 runtime_signal_init()
 {
 #ifndef BH_PLATFORM_WINDOWS
@@ -439,10 +439,20 @@ fail1:
 static bool
 wasm_runtime_exec_env_check(WASMExecEnv *exec_env)
 {
+#ifdef __CHERI__
+#include <cheriintrin.h>
     return exec_env && exec_env->module_inst && exec_env->wasm_stack_size > 0
-           && exec_env->wasm_stack.s.top_boundary
-                  == exec_env->wasm_stack.s.bottom + exec_env->wasm_stack_size
-           && exec_env->wasm_stack.s.top <= exec_env->wasm_stack.s.top_boundary;
+        && (uintptr_t)exec_env->wasm_stack_p->top_boundary
+            == (uintptr_t)exec_env->wasm_stack_p->bottom + exec_env->wasm_stack_size
+        && (uintptr_t)exec_env->wasm_stack_p->top <= (uintptr_t)exec_env->wasm_stack_p->top_boundary
+        && cheri_base_get(exec_env->wasm_stack_p->top) == cheri_base_get(exec_env->wasm_stack_p->bottom)
+        && cheri_base_get(exec_env->wasm_stack_p->top) == cheri_base_get(exec_env->wasm_stack_p->top_boundary);
+#else
+    return exec_env && exec_env->module_inst && exec_env->wasm_stack_size > 0
+        && exec_env->wasm_stack.s.top_boundary
+        == exec_env->wasm_stack.s.bottom + exec_env->wasm_stack_size
+        && exec_env->wasm_stack.s.top <= exec_env->wasm_stack.s.top_boundary;
+#endif
 }
 
 bool
@@ -4055,11 +4065,19 @@ typedef void (*GenericFunctionPointer)();
 void
 invokeNative(GenericFunctionPointer f, uint64 *args, uint64 n_stacks);
 
-typedef float64 (*Float64FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
-typedef float32 (*Float32FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
-typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
-typedef int32 (*Int32FuncPtr)(GenericFunctionPointer, uint64 *, uint64);
-typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint64 *, uint64);
+#ifdef ENABLE_CHERI_PURECAP
+typedef float64 (*Float64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+typedef float32 (*Float32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+typedef int32 (*Int32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+#else
+typedef float64(*Float64FuncPtr)(GenericFunctionPointer, uint64*, uint64);
+typedef float32(*Float32FuncPtr)(GenericFunctionPointer, uint64*, uint64);
+typedef int64(*Int64FuncPtr)(GenericFunctionPointer, uint64*, uint64);
+typedef int32(*Int32FuncPtr)(GenericFunctionPointer, uint64*, uint64);
+typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint64*, uint64);
+#endif
 
 static volatile Float64FuncPtr invokeNative_Float64 =
     (Float64FuncPtr)(uintptr_t)invokeNative;
@@ -4092,111 +4110,177 @@ static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
           || defined(BUILD_TARGET_RISCV64_LP64) */
 #endif /* end of defined(_WIN32) || defined(_WIN32_) */
 
+#if ENABLE_CHERI_PURECAP
+
+// CHERI Helpers to write to args buffer
+static void update_args_as_int64(uint64 arg, uintptr_t* ints, uint8* stacks, uint32* n_ints, uint32* stack_bytes_used)
+{
+    if (*n_ints < MAX_REG_INTS)
+    {
+        // Copy directly to ints buffer, as 128-bit value
+        ints[*n_ints] = (uintptr_t)arg;
+        (*n_ints)++;
+    }
+    else
+    {
+        // Copy to stack as 64 bit value, with 64-bit alignment
+        *stack_bytes_used = cheri_align_up(*stack_bytes_used, sizeof(uint64));
+        *((uint64_t*)&stacks[*stack_bytes_used]) = arg;
+        *stack_bytes_used += sizeof(uint64);
+    }
+}
+
+static void update_args_as_pointer(uintptr_t arg, uintptr_t* ints, uint8* stacks, uint32* n_ints, uint32* stack_bytes_used)
+{
+    if (*n_ints < MAX_REG_INTS)
+    {
+        // Copy directly to ints buffer, as 128-bit value
+        ints[*n_ints] = arg;
+        (*n_ints)++;
+    }
+    else
+    {
+        // Copy to stack as 128 bit value, with 128-bit alignment
+        *stack_bytes_used = cheri_align_up(*stack_bytes_used, sizeof(uintptr_t));
+        *((uintptr_t*)&stacks[*stack_bytes_used]) = arg;
+        *stack_bytes_used += sizeof(uintptr_t);
+    }
+}
+
+static void update_args_as_f32(float32 arg, uint64* fps, uint8* stacks, uint32* n_fps, uint32* stack_bytes_used)
+{
+    if (*n_fps < MAX_REG_FLOATS)
+    {
+        // Copy directly to fps buffer, as 32-bit float with 64-bit space allocation
+        *((float32*)& fps[*n_fps]) = arg;
+        (*n_fps)++;
+    }
+    else
+    {
+        // Copy to stack as 32 bit float, with 64-bit alignment
+        *stack_bytes_used = cheri_align_up(*stack_bytes_used, sizeof(uint64));
+        *((float32*)&stacks[*stack_bytes_used]) = arg;
+        *stack_bytes_used += sizeof(uint64);
+    }
+}
+
+static void update_args_as_f64(float64 arg, uint64* fps, uint8* stacks, uint32* n_fps, uint32* stack_bytes_used)
+{
+    if (*n_fps < MAX_REG_FLOATS)
+    {
+        // Copy directly to fps buffer, as 64-bit float with 64-bit space allocation
+        *((float64*)&fps[*n_fps]) = arg;
+        (*n_fps)++;
+    }
+    else
+    {
+        // Copy to stack as 64 bit float, with 64-bit alignment
+        *stack_bytes_used = cheri_align_up(*stack_bytes_used, sizeof(uint64));
+        *((float64*)&stacks[*stack_bytes_used]) = arg;
+        *stack_bytes_used += sizeof(uint64);
+    }
+}
+
+/* CHERI PureCap version of function, because purecap is so different to other AARCH64 targets */
 bool
 wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            const WASMType *func_type, const char *signature,
                            void *attachment, uint32 *argv, uint32 argc,
                            uint32 *argv_ret)
 {
-    WASMModuleInstanceCommon *module = wasm_runtime_get_module_inst(exec_env);
+    // The args structure is different than other targets for CHERI...
+    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8), following given in bytes:
+    // argv[0..15]     : CPtr exec_env (128-bit)
+    // argv[16..79]    : fps (x8)
+    // argv[80..207]   : ints (x8)
+    // argv[208..463]  : stack args (x16 max) *could* be a capability pointer
 
-#if ENABLE_CHERI_PURECAP
-    uint64 argv_buf[34] __attribute__((aligned(16))) = {0}; // Extra space for purecap (+8 for cptr and further 8 for alignment)
-#else
-    uint64 argv_buf[32] = { 0 };        // Space for all arguments
+    // Copying stack arguments on Morello:
+    // This is complex.  All arguments are stored on the stack as 64-bit apart from capabilities which are 128-bit.
+    // Therefore when storing a capability, we need to align up to 16 byte boundary.
+    // This means that number of arguments on the stack is irrelevant, because we need to take care of the alignments which *may*
+    // happen if it is a capability pointer being placed on the stack.
+
+    // Therefore on CHERI, n_stacks = BYTEs not ARGUMENTs
+
+    // *IMPORTANT* WASM_ENABLE_SIMD not supported on CHERI
+#if WASM_ENABLE_SIMD != 0
+#error WASM_ENABLE_SIMD not supported on CHERI
 #endif
 
-    uint64 *argv1 = argv_buf;           // Buffer to pass all arguments
-    uint64 *ints;                       // Integers part of arg_buf
-    uint64 *stacks;                     // Stacks part of arg_buf
-    
-    uint64 size, arg_i64;
+    bh_assert(0 == (MAX_REG_FLOATS & 0x1));    // We need an even number of MAX_REG_FLOATS to keep 16 byte alignment
 
-    uint32 *argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;
+#define CHERI_DEFAULT_STACK_NARGS   16      // Arguments space on stack after MAX_REG_FLOATS and MAX_REG_INTS
+
+#define CHERI_BUFFER_BYTE_SIZE ( \
+    (sizeof(uintptr_t) * 1) \
+        + (sizeof(uint64_t) * MAX_REG_FLOATS) \
+        + (sizeof(uintptr_t) * MAX_REG_INTS) \
+        + (sizeof(uintptr_t) * CHERI_DEFAULT_STACK_NARGS) \
+        )
+
+   WASMModuleInstanceCommon* module = wasm_runtime_get_module_inst(exec_env);
+
+    uint8 argv_buf[CHERI_BUFFER_BYTE_SIZE] __attribute__((aligned(16))) = { 0 }; // See above
+    uint8* argv1 = argv_buf;                // Buffer to pass all arguments (default use the stack buffer)
+    uint64* fps;                            // Floats part of arg_buf
+    uintptr_t* ints;                        // Integers part of arg_buf
+    uint8* stacks;                          // Stacks part of arg_buf but we treat it like a byte array
+    uintptr_t arg_i64;                      // Int or ptr argument
+    uint32  size;                           // New size of buffer needed
+
+    uint32* argv_src = argv;
+    uint32 i, n_ints = 0, n_fps = 0;
+    uint32 stack_bytes_used = 0;    
+
     uint32 arg_i32, ptr_len;
     uint32 result_count = func_type->result_count;
     uint32 ext_ret_count = result_count > 1 ? result_count - 1 : 0;
+
+    float32 fp32;
+    float64 fp64;
+
     bool ret = false;
+
 #if WASM_ENABLE_REF_TYPES != 0
     bool is_aot_func = (NULL == signature);
 #endif
-#ifndef BUILD_TARGET_RISCV64_LP64
-#if WASM_ENABLE_SIMD == 0
-    uint64 *fps;                        // Floats part of arg_buf
-#else
-    v128 *fps;
-#endif
-#else /* else of BUILD_TARGET_RISCV64_LP64 */
-#define fps ints
-#endif /* end of BUILD_TARGET_RISCV64_LP64 */
 
-#if defined(_WIN32) || defined(_WIN32_) || defined(BUILD_TARGET_RISCV64_LP64)
-    /* important difference in calling conventions */
-#define n_fps n_ints
-#else
-    int n_fps = 0;
-#endif
+    // Figure out if we have enough space for the arguments.
+    uint32 argc1 = func_type->param_count + ext_ret_count;  // Number of args required
+    if ( argc1 > MAX_REG_FLOATS + MAX_REG_INTS + CHERI_DEFAULT_STACK_NARGS) {
+        uint32 additional_nargs = argc1 - MAX_REG_FLOATS + MAX_REG_INTS + CHERI_DEFAULT_STACK_NARGS;
 
-#if WASM_ENABLE_SIMD == 0
-    argc1 = 1 + MAX_REG_FLOATS + (uint32)func_type->param_count + ext_ret_count;
-#else
-    argc1 = 1 + MAX_REG_FLOATS * 2 + (uint32)func_type->param_count * 2
-            + ext_ret_count;
-#endif
-    if (argc1 > sizeof(argv_buf) / sizeof(uint64)) {
-        size = sizeof(uint64) * (uint64)argc1;
-        if (!(argv1 = runtime_malloc((uint32)size, exec_env->module_inst, NULL,
-                                     0))) {
+        size = CHERI_BUFFER_BYTE_SIZE + sizeof(uintptr_t) * additional_nargs;   // Total space = existing used + extra needed
+        if (!(argv1 = runtime_malloc(size, exec_env->module_inst, NULL, 0))) {  // Use malloc'd buffer instead of stack buffer
             return false;
         }
     }
 
+    // Set up pointers to the parts of the big argv1 buffer
 
-#if ENABLE_CHERI_PURECAP
-    // Set up argv pointers for CHERI purecap
-    // Note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8
-    // The structure is different than other targets, and is:
-    // argv[0..1]   : CPtr exec_env (128-bit)
-    // argv[2..9]  : fps
-    // argv[10..17] : ints
-    // argv[18..33] : stack args
-
-    WASMExecEnv **argv1_p = (WASMExecEnv **)argv1;
+    WASMExecEnv **argv1_p = (WASMExecEnv **)argv1;      // Passing the exec env
 
     *argv1_p = exec_env;
 
-    fps = &argv1[2];
-    ints = fps + MAX_REG_FLOATS;
-    stacks = ints + MAX_REG_INTS;
-#else
-
-#ifndef BUILD_TARGET_RISCV64_LP64
-#if WASM_ENABLE_SIMD == 0
-    fps = argv1;
-    ints = fps + MAX_REG_FLOATS;
-#else
-    fps = (v128 *)argv1;
-    ints = (uint64 *)(fps + MAX_REG_FLOATS);
-#endif
-#else  /* else of BUILD_TARGET_RISCV64_LP64 */
-    ints = argv1;
-#endif /* end of BUILD_TARGET_RISCV64_LP64 */
-    stacks = ints + MAX_REG_INTS;
-
-    ints[n_ints++] = (uint64)(uintptr_t)exec_env;
-#endif /* ENABLE_CHERI_PURECAP */
+    fps = (uint64_t*)&argv1[(sizeof(uintptr_t) * 1)];   // Skip over the argv_1 bit
+    ints = (uintptr_t*)&argv1[(sizeof(uintptr_t) * 1) + (sizeof(uint64_t) * MAX_REG_FLOATS)];   // Skip over the argv_1 bit + floats
+    stacks = (uint8_t*)&argv1[(sizeof(uintptr_t) * 1)
+                                + (sizeof(uint64_t) * MAX_REG_FLOATS)
+                                + (sizeof(uintptr_t) * MAX_REG_INTS)
+                                ];   // Skip over the argv_1 bit + floats + ints
 
     for (i = 0; i < func_type->param_count; i++) {
         switch (func_type->types[i]) {
+
             case VALUE_TYPE_I32:
+                // Pointer, string or i32
 #if WASM_ENABLE_REF_TYPES != 0
             case VALUE_TYPE_FUNCREF:
 #endif
             {
                 arg_i32 = *argv_src++;
-                arg_i64 = arg_i32;
-                if (signature) {
-                    if (signature[i + 1] == '*') {
+                if (signature && signature[i + 1] == '*') {
                         /* param is a pointer */
                         if (signature[i + 2] == '~')
                             /* pointer with length followed */
@@ -4211,8 +4295,10 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 
                         arg_i64 = (uintptr_t)wasm_runtime_addr_app_to_native(
                             module, arg_i32);
-                    }
-                    else if (signature[i + 1] == '$') {
+
+                        update_args_as_pointer(arg_i64, ints, stacks, &n_ints, &stack_bytes_used);
+                }
+                else if (signature && signature[i + 1] == '$') {
                         /* param is a string */
                         if (!wasm_runtime_validate_app_str_addr(module,
                                                                 arg_i32))
@@ -4220,39 +4306,34 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 
                         arg_i64 = (uintptr_t)wasm_runtime_addr_app_to_native(
                             module, arg_i32);
-                    }
+
+                        update_args_as_pointer(arg_i64, ints, stacks, &n_ints, &stack_bytes_used);
+
                 }
-                if (n_ints < MAX_REG_INTS)
-                    ints[n_ints++] = arg_i64;
-                else
-                    stacks[n_stacks++] = arg_i64;
+                else {
+                    // Just a number
+                    update_args_as_int64( (uint64)arg_i32, ints, stacks, &n_ints, &stack_bytes_used);
+                }
                 break;
             }
             case VALUE_TYPE_I64:
-                if (n_ints < MAX_REG_INTS)
-                    ints[n_ints++] = *(uint64 *)argv_src;
-                else
-                    stacks[n_stacks++] = *(uint64 *)argv_src;
+                update_args_as_int64(*(uint64*)argv_src, ints, stacks, &n_ints, &stack_bytes_used);
                 argv_src += 2;
                 break;
+
             case VALUE_TYPE_F32:
-                if (n_fps < MAX_REG_FLOATS) {
-                    *(float32 *)&fps[n_fps++] = *(float32 *)argv_src++;
-                }
-                else {
-                    *(float32 *)&stacks[n_stacks++] = *(float32 *)argv_src++;
-                }
+                fp32 = *(float32*)argv_src++;
+                update_args_as_f32(fp32, fps, stacks, &n_fps, &stack_bytes_used);
                 break;
+
             case VALUE_TYPE_F64:
-                if (n_fps < MAX_REG_FLOATS) {
-                    *(float64 *)&fps[n_fps++] = *(float64 *)argv_src;
-                }
-                else {
-                    *(float64 *)&stacks[n_stacks++] = *(float64 *)argv_src;
-                }
+                fp64 = *(float64 *)argv_src;
+                update_args_as_f64(fp64, fps, stacks, &n_fps, &stack_bytes_used);
                 argv_src += 2;
                 break;
+
 #if WASM_ENABLE_REF_TYPES != 0
+#error "WASM_ENABLE_REF_TYPES not yet supported on CHERI"
             case VALUE_TYPE_EXTERNREF:
             {
                 uint32 externref_idx = *argv_src++;
@@ -4276,18 +4357,6 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
             }
 #endif
-#if WASM_ENABLE_SIMD != 0
-            case VALUE_TYPE_V128:
-                if (n_fps < MAX_REG_FLOATS) {
-                    *(v128 *)&fps[n_fps++] = *(v128 *)argv_src;
-                }
-                else {
-                    *(v128 *)&stacks[n_stacks++] = *(v128 *)argv_src;
-                    n_stacks++;
-                }
-                argv_src += 4;
-                break;
-#endif
             default:
                 bh_assert(0);
                 break;
@@ -4296,16 +4365,14 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
 
     /* Save extra result values' address to argv1 */
     for (i = 0; i < ext_ret_count; i++) {
-        if (n_ints < MAX_REG_INTS)
-            ints[n_ints++] = *(uint64 *)argv_src;
-        else
-            stacks[n_stacks++] = *(uint64 *)argv_src;
-        argv_src += 2;
+        arg_i64 = *(uintptr_t*)argv_src;
+        update_args_as_pointer(arg_i64, ints, stacks, &n_ints, &stack_bytes_used);
+        argv_src += 4;
     }
 
     exec_env->attachment = attachment;
     if (result_count == 0) {
-        invokeNative_Void(func_ptr, argv1, n_stacks);
+        invokeNative_Void(func_ptr, argv1, stack_bytes_used);
     }
     else {
         /* Invoke the native function and get the first result value */
@@ -4315,19 +4382,19 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
             case VALUE_TYPE_FUNCREF:
 #endif
                 argv_ret[0] =
-                    (uint32)invokeNative_Int32(func_ptr, argv1, n_stacks);
+                    (uint32)invokeNative_Int32(func_ptr, argv1, stack_bytes_used);
                 break;
             case VALUE_TYPE_I64:
                 PUT_I64_TO_ADDR(argv_ret,
-                                invokeNative_Int64(func_ptr, argv1, n_stacks));
+                                invokeNative_Int64(func_ptr, argv1, stack_bytes_used));
                 break;
             case VALUE_TYPE_F32:
                 *(float32 *)argv_ret =
-                    invokeNative_Float32(func_ptr, argv1, n_stacks);
+                    invokeNative_Float32(func_ptr, argv1, stack_bytes_used);
                 break;
             case VALUE_TYPE_F64:
                 PUT_F64_TO_ADDR(
-                    argv_ret, invokeNative_Float64(func_ptr, argv1, n_stacks));
+                    argv_ret, invokeNative_Float64(func_ptr, argv1, stack_bytes_used));
                 break;
 #if WASM_ENABLE_REF_TYPES != 0
             case VALUE_TYPE_EXTERNREF:
@@ -4349,12 +4416,6 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
             }
 #endif
-#if WASM_ENABLE_SIMD != 0
-            case VALUE_TYPE_V128:
-                *(v128 *)argv_ret =
-                    invokeNative_V128(func_ptr, argv1, n_stacks);
-                break;
-#endif
             default:
                 bh_assert(0);
                 break;
@@ -4369,6 +4430,265 @@ fail:
 
     return ret;
 }
+
+
+# else /* ! CHERI PureCap */
+
+bool
+wasm_runtime_invoke_native(WASMExecEnv* exec_env, void* func_ptr,
+    const WASMType* func_type, const char* signature,
+    void* attachment, uint32* argv, uint32 argc,
+    uint32* argv_ret)
+{
+    WASMModuleInstanceCommon* module = wasm_runtime_get_module_inst(exec_env);
+
+    uint64 argv_buf[32] = { 0 };        // Space for all arguments
+    uint64* argv1 = argv_buf;           // Buffer to pass all arguments
+    uint64* ints;                       // Integers part of arg_buf
+    uint64* stacks;                     // Stacks part of arg_buf
+    uint64 arg_i64;
+
+#ifndef BUILD_TARGET_RISCV64_LP64
+#if WASM_ENABLE_SIMD == 0
+    uint64* fps;
+#else
+    v128* fps;
+#endif
+#else /* else of BUILD_TARGET_RISCV64_LP64 */
+#define fps ints
+#endif /* end of BUILD_TARGET_RISCV64_LP64 */
+    uint64 size;
+
+    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    // Note that on CHERI, n_stacks means BYTES of stack used.
+    uint32 arg_i32, ptr_len;
+    uint32 result_count = func_type->result_count;
+    uint32 ext_ret_count = result_count > 1 ? result_count - 1 : 0;
+    bool ret = false;
+#if WASM_ENABLE_REF_TYPES != 0
+    bool is_aot_func = (NULL == signature);
+#endif
+
+#if defined(_WIN32) || defined(_WIN32_) || defined(BUILD_TARGET_RISCV64_LP64)
+    /* important difference in calling conventions */
+#define n_fps n_ints
+#else
+    int n_fps = 0;
+#endif
+
+#if WASM_ENABLE_SIMD == 0
+    argc1 = 1 + MAX_REG_FLOATS + (uint32)func_type->param_count + ext_ret_count;
+#else
+    argc1 = 1 + MAX_REG_FLOATS * 2 + (uint32)func_type->param_count * 2
+        + ext_ret_count;
+#endif
+
+    if (argc1 > sizeof(argv_buf) / sizeof(uint64)) {
+        size = sizeof(uint64) * (uint64)argc1;
+        if (!(argv1 = runtime_malloc((uint32)size, exec_env->module_inst, NULL,
+            0))) {
+            return false;
+        }
+    }
+
+#ifndef BUILD_TARGET_RISCV64_LP64
+#if WASM_ENABLE_SIMD == 0
+    fps = argv1;
+    ints = fps + MAX_REG_FLOATS;
+#else
+    fps = (v128*)argv1;
+    ints = (uint64*)(fps + MAX_REG_FLOATS);
+#endif
+#else  /* else of BUILD_TARGET_RISCV64_LP64 */
+    ints = argv1;
+#endif /* end of BUILD_TARGET_RISCV64_LP64 */
+    stacks = ints + MAX_REG_INTS;
+
+    ints[n_ints++] = (uint64)(uintptr_t)exec_env;
+
+    for (i = 0; i < func_type->param_count; i++) {
+        switch (func_type->types[i]) {
+        case VALUE_TYPE_I32:
+#if WASM_ENABLE_REF_TYPES != 0
+        case VALUE_TYPE_FUNCREF:
+#endif
+        {
+            arg_i32 = *argv_src++;
+            arg_i64 = arg_i32;
+            if (signature) {
+                if (signature[i + 1] == '*') {
+                    /* param is a pointer */
+                    if (signature[i + 2] == '~')
+                        /* pointer with length followed */
+                        ptr_len = *argv_src;
+                    else
+                        /* pointer without length followed */
+                        ptr_len = 1;
+
+                    if (!wasm_runtime_validate_app_addr(module, arg_i32,
+                        ptr_len))
+                        goto fail;
+
+                    arg_i64 = (uintptr_t)wasm_runtime_addr_app_to_native(
+                        module, arg_i32);
+                }
+                else if (signature[i + 1] == '$') {
+                    /* param is a string */
+                    if (!wasm_runtime_validate_app_str_addr(module,
+                        arg_i32))
+                        goto fail;
+
+                    arg_i64 = (uintptr_t)wasm_runtime_addr_app_to_native(
+                        module, arg_i32);
+                }
+            }
+            if (n_ints < MAX_REG_INTS)
+                ints[n_ints++] = arg_i64;
+            else
+                stacks[n_stacks++] = arg_i64;
+            break;
+        }
+        case VALUE_TYPE_I64:
+            if (n_ints < MAX_REG_INTS)
+                ints[n_ints++] = *(uint64*)argv_src;
+            else
+                stacks[n_stacks++] = *(uint64*)argv_src;
+            argv_src += 2;
+            break;
+        case VALUE_TYPE_F32:
+            if (n_fps < MAX_REG_FLOATS) {
+                *(float32*)&fps[n_fps++] = *(float32*)argv_src++;
+            }
+            else {
+                *(float32*)&stacks[n_stacks++] = *(float32*)argv_src++;
+            }
+            break;
+        case VALUE_TYPE_F64:
+            if (n_fps < MAX_REG_FLOATS) {
+                *(float64*)&fps[n_fps++] = *(float64*)argv_src;
+            }
+            else {
+                *(float64*)&stacks[n_stacks++] = *(float64*)argv_src;
+            }
+            argv_src += 2;
+            break;
+#if WASM_ENABLE_REF_TYPES != 0
+        case VALUE_TYPE_EXTERNREF:
+        {
+            uint32 externref_idx = *argv_src++;
+            if (is_aot_func) {
+                if (n_ints < MAX_REG_INTS)
+                    ints[n_ints++] = externref_idx;
+                else
+                    stacks[n_stacks++] = externref_idx;
+            }
+            else {
+                void* externref_obj;
+
+                if (!wasm_externref_ref2obj(externref_idx, &externref_obj))
+                    goto fail;
+
+                if (n_ints < MAX_REG_INTS)
+                    ints[n_ints++] = (uintptr_t)externref_obj;
+                else
+                    stacks[n_stacks++] = (uintptr_t)externref_obj;
+            }
+            break;
+        }
+#endif
+#if WASM_ENABLE_SIMD != 0
+        case VALUE_TYPE_V128:
+            if (n_fps < MAX_REG_FLOATS) {
+                *(v128*)&fps[n_fps++] = *(v128*)argv_src;
+            }
+            else {
+                *(v128*)&stacks[n_stacks++] = *(v128*)argv_src;
+                n_stacks++;
+            }
+            argv_src += 4;
+            break;
+#endif
+        default:
+            bh_assert(0);
+            break;
+        }
+    }
+
+    /* Save extra result values' address to argv1 */
+    for (i = 0; i < ext_ret_count; i++) {
+        if (n_ints < MAX_REG_INTS)
+            ints[n_ints++] = *(uint64*)argv_src;
+        else
+            stacks[n_stacks++] = *(uint64*)argv_src;
+        argv_src += 2;
+    }
+
+    exec_env->attachment = attachment;
+    if (result_count == 0) {
+        invokeNative_Void(func_ptr, argv1, n_stacks);
+    }
+    else {
+        /* Invoke the native function and get the first result value */
+        switch (func_type->types[func_type->param_count]) {
+        case VALUE_TYPE_I32:
+#if WASM_ENABLE_REF_TYPES != 0
+        case VALUE_TYPE_FUNCREF:
+#endif
+            argv_ret[0] =
+                (uint32)invokeNative_Int32(func_ptr, argv1, n_stacks);
+            break;
+        case VALUE_TYPE_I64:
+            PUT_I64_TO_ADDR(argv_ret,
+                invokeNative_Int64(func_ptr, argv1, n_stacks));
+            break;
+        case VALUE_TYPE_F32:
+            *(float32*)argv_ret =
+                invokeNative_Float32(func_ptr, argv1, n_stacks);
+            break;
+        case VALUE_TYPE_F64:
+            PUT_F64_TO_ADDR(
+                argv_ret, invokeNative_Float64(func_ptr, argv1, n_stacks));
+            break;
+#if WASM_ENABLE_REF_TYPES != 0
+        case VALUE_TYPE_EXTERNREF:
+        {
+            if (is_aot_func) {
+                argv_ret[0] = invokeNative_Int32(func_ptr, argv1, n_stacks);
+            }
+            else {
+                uint32 externref_idx;
+                void* externref_obj = (void*)(uintptr_t)invokeNative_Int64(
+                    func_ptr, argv1, n_stacks);
+
+                if (!wasm_externref_obj2ref(exec_env->module_inst,
+                    externref_obj, &externref_idx))
+                    goto fail;
+
+                argv_ret[0] = externref_idx;
+            }
+            break;
+        }
+#endif
+#if WASM_ENABLE_SIMD != 0
+        case VALUE_TYPE_V128:
+            *(v128*)argv_ret =
+                invokeNative_V128(func_ptr, argv1, n_stacks);
+            break;
+#endif
+        default:
+            bh_assert(0);
+            break;
+        }
+    }
+    exec_env->attachment = NULL;
+
+    ret = !wasm_runtime_get_exception(module) ? true : false;
+fail:
+    if (argv1 != argv_buf)
+        wasm_runtime_free(argv1);
+
+    return ret;
+}
+#endif /* CHERI PureCap */
 
 #endif /* end of defined(BUILD_TARGET_X86_64)           \
                  || defined(BUILD_TARGET_AMD_64)        \

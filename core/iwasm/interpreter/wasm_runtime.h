@@ -73,7 +73,8 @@ typedef union {
     uint32 u32[2];
 } MemBound;
 
-struct WASMMemoryInstance {
+struct WASMMemoryInstance
+{
     /* Module type */
     uint32 module_type;
     /* Shared memory flag */

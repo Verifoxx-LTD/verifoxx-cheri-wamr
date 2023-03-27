@@ -23,10 +23,19 @@
 #endif
 #endif
 
+#ifdef __CHERI__
+#include "cheri_mem_mgt_c_api.h"
+#endif
+
 WASMExecEnv *
 wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
                               uint32 stack_size)
 {
+
+#ifdef __CHERI__
+    WASMExecEnv* exec_env = wasm_runtime_malloc(sizeof(WASMExecEnv));
+    memset(exec_env, 0, sizeof(WASMExecEnv));
+#else
     uint64 total_size =
         offsetof(WASMExecEnv, wasm_stack.s.bottom) + (uint64)stack_size;
     WASMExecEnv *exec_env;
@@ -36,6 +45,7 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
         return NULL;
 
     memset(exec_env, 0, (uint32)total_size);
+#endif
 
 #if WASM_ENABLE_AOT != 0
     if (!(exec_env->argv_buf = wasm_runtime_malloc(sizeof(uint32) * 64))) {
@@ -63,10 +73,17 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
 #endif
 
     exec_env->module_inst = module_inst;
+
+#ifdef __CHERI__
+    exec_env->wasm_stack_size = cheri_wasm_get_stack_size();
+    exec_env->wasm_stack_p = cheri_wasm_get_stack_struct();
+#else
     exec_env->wasm_stack_size = stack_size;
     exec_env->wasm_stack.s.top_boundary =
         exec_env->wasm_stack.s.bottom + stack_size;
     exec_env->wasm_stack.s.top = exec_env->wasm_stack.s.bottom;
+
+#endif
 
 #if WASM_ENABLE_AOT != 0
     if (module_inst->module_type == Wasm_Module_AoT) {

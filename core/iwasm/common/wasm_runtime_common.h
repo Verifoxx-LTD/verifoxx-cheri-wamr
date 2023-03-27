@@ -25,6 +25,8 @@
 extern "C" {
 #endif
 
+bool runtime_signal_init();
+
 /* Internal use for setting default running mode */
 #define Mode_Default 0
 
@@ -311,7 +313,12 @@ typedef struct WASMModuleCommon {
        some module_type dependent members follow.
        Typically it should be accessed by casting to the corresponding
        actual module_type dependent structure, not via this member. */
+#ifdef __CHERI__
+    uint8 module_data[1] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     uint8 module_data[1];
+#endif
+
 } WASMModuleCommon;
 
 typedef struct WASMModuleInstanceCommon {
@@ -327,7 +334,12 @@ typedef struct WASMModuleInstanceCommon {
        some module_type dependent members follow.
        Typically it should be accessed by casting to the corresponding
        actual module_type dependent structure, not via this member. */
+#ifdef __CHERI__
+    uint8 module_inst_data[1] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     uint8 module_inst_data[1];
+#endif
+
 } WASMModuleInstanceCommon;
 
 typedef struct WASMModuleMemConsumption {
@@ -362,18 +374,23 @@ typedef struct WASMModuleInstMemConsumption {
 #if WASM_ENABLE_LIBC_WASI != 0
 #if WASM_ENABLE_UVWASI == 0
 typedef struct WASIContext {
-    struct fd_table *curfds;
-    struct fd_prestats *prestats;
-    struct argv_environ_values *argv_environ;
-    struct addr_pool *addr_pool;
-    char *ns_lookup_buf;
-    char **ns_lookup_list;
-    char *argv_buf;
-    char **argv_list;
-    char *env_buf;
-    char **env_list;
+    struct fd_table* curfds;
+    struct fd_prestats* prestats;
+    struct argv_environ_values* argv_environ;
+    struct addr_pool* addr_pool;
+    char* ns_lookup_buf;
+    char** ns_lookup_list;
+    char* argv_buf;
+    char** argv_list;
+    char* env_buf;
+    char** env_list;
     uint32_t exit_code;
+#ifdef __CHERI__
+} WASIContext __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
 } WASIContext;
+#endif
+
 #else
 typedef struct WASIContext {
     uvwasi_t uvwasi;
@@ -401,7 +418,11 @@ typedef struct WASMMemoryInstanceCommon {
        some module_type dependent members follow.
        Typically it should be accessed by casting to the corresponding
        actual module_type dependent structure, not via this member. */
+#ifdef __CHERI__
+    uint8 memory_inst_data[1] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     uint8 memory_inst_data[1];
+#endif
 } WASMMemoryInstanceCommon;
 
 typedef package_type_t PackageType;
@@ -409,12 +430,16 @@ typedef wasm_section_t WASMSection, AOTSection;
 
 typedef struct wasm_frame_t {
     /*  wasm_instance_t */
-    void *instance;
+    void* instance;
     uint32 module_offset;
     uint32 func_index;
     uint32 func_offset;
-    const char *func_name_wp;
+    const char* func_name_wp;
+#ifdef __CHERI__
+} WASMCApiFrame __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
 } WASMCApiFrame;
+#endif
 
 #ifdef WASM_ENABLE_JIT
 typedef struct LLVMJITOptions {
@@ -426,13 +451,17 @@ typedef struct LLVMJITOptions {
 #ifdef OS_ENABLE_HW_BOUND_CHECK
 /* Signal info passing to interp/aot signal handler */
 typedef struct WASMSignalInfo {
-    WASMExecEnv *exec_env_tls;
+    WASMExecEnv* exec_env_tls;
 #ifndef BH_PLATFORM_WINDOWS
-    void *sig_addr;
+    void* sig_addr;
 #else
-    EXCEPTION_POINTERS *exce_info;
+    EXCEPTION_POINTERS* exce_info;
 #endif
+#ifdef __CHERI__
+} WASMSignalInfo __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
 } WASMSignalInfo;
+#endif
 
 /* Set exec_env of thread local storage */
 void

@@ -17,13 +17,14 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
         "CHERI_PURECAP": "0",
-		"CHERI_STATIC_BUILD": "1",
-		"CHERI_COMPILER_FLAGS": "-fpack-struct=16 -mstrict-align",
-		"WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
-		"WAMR_BUILD_AOT": "0",
-		"WAMR_BUILD_LIBC_BUILTIN": "1",
-		"WAMR_BUILD_FAST_INTERP": "1",
-		"WAMR_BUILD_SIMD": "0"
+		    "CHERI_STATIC_BUILD": "1",
+		    "CHERI_COMPILER_FLAGS": "-fpack-struct=16 -mstrict-align",
+		    "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+		    "WAMR_BUILD_AOT": "0",
+		    "WAMR_BUILD_LIBC_BUILTIN": "1",
+		    "WAMR_BUILD_FAST_INTERP": "0",
+        "WAMR_BUILD_SIMD": "0",
+        "WAMR_APP":  "1"
       },
       "condition": {
         "type": "equals",

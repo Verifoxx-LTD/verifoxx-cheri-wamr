@@ -8,6 +8,10 @@
 
 #include "wasm.h"
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,9 +62,19 @@ typedef struct WASMInterpFrame {
      *  csp_bottom to csp_boundary: wasm label stack
      *  jit spill cache: only available for fast jit
      */
+#ifdef __CHERI__
+    uint32 lp[1] __attribute__((aligned));
+#else
     uint32 lp[1];
 #endif
+
+#endif
+#ifdef __CHERI__
+} WASMInterpFrame __attribute__((aligned));
+#else
 } WASMInterpFrame;
+#endif
+
 
 /**
  * Calculate the size of interpreter area of frame of a function.
@@ -75,21 +89,17 @@ wasm_interp_interp_frame_size(unsigned all_cell_num)
 {
     unsigned frame_size;
 
-
-#if ENABLE_CHERI_PURECAP
-#if WASM_ENABLE_FAST_INTERP == 0
-    frame_size = (uint32)offsetof(WASMInterpFrame, lp) + all_cell_num * 16; // Alignment
-#else
-    frame_size = (uint32)offsetof(WASMInterpFrame, operand) + all_cell_num * 16;    // Alignment
-#endif
-    return align_uint(frame_size, 16);
-
-#else
 #if WASM_ENABLE_FAST_INTERP == 0
     frame_size = (uint32)offsetof(WASMInterpFrame, lp) + all_cell_num * 4;
 #else
     frame_size = (uint32)offsetof(WASMInterpFrame, operand) + all_cell_num * 4;
 #endif
+
+#ifdef __CHERI__
+    // Allow for 4 extra alignments
+    frame_size += sizeof(void* __capability) * 4;
+    return cheri_align_up(frame_size, __BIGGEST_ALIGNMENT__);
+#else
     return align_uint(frame_size, 4);
 #endif
 }
