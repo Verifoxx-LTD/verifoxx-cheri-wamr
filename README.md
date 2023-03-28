@@ -7,6 +7,8 @@ However note the pure-cap version is very cut down and is likely to only run the
 
 The version in "sandbox" is latest bleeding-edge changes intended to try and fix various issues that cause CHERI capability faults.
 
+**IMPORTANT:** At the moment, iwasm build is not working with linux-cheri-purecap.  Instead, build the WAMR front end by setting WAMR_APP=1 in your CMake options.
+
 
 ## Building CHERI-WAMR with CMake
 You can build from the root folder directly with CMake, but this requires a number of flags to configure WAMR and the build system.
