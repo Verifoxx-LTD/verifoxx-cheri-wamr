@@ -11,6 +11,10 @@
 #include "../interpreter/wasm.h"
 #endif
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,6 +35,17 @@ typedef struct WASMJmpBuf {
     korp_jmpbuf jmpbuf;
 } WASMJmpBuf;
 #endif
+
+#ifdef __CHERI__
+// @see : cheri_mem_mgmt.h
+typedef struct
+{
+    uint8* __capability top_boundary;
+    uint8* __capability top;
+    uint8* __capability bottom;
+}  WASMCheriStack_t __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#endif
+
 
 /* Execution environment */
 typedef struct WASMExecEnv {
@@ -127,7 +142,11 @@ typedef struct WASMExecEnv {
 #endif
 
     /* attachment for native function */
-    void *attachment;
+#ifdef __CHERI__
+    void* attachment __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
+    void* attachment;
+#endif
 
     void *user_data;
 
@@ -138,11 +157,19 @@ typedef struct WASMExecEnv {
     korp_tid handle;
 
 #if WASM_ENABLE_INTERP != 0 && WASM_ENABLE_FAST_INTERP == 0
-    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE];
+#ifdef __CHERI__
+    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
+    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#endif
 #endif
 
 #ifdef OS_ENABLE_HW_BOUND_CHECK
-    WASMJmpBuf *jmpbuf_stack_top;
+#ifdef __CHERI__
+    WASMJmpBuf *jmpbuf_stack_top __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
+    WASMJmpBuf* jmpbuf_stack_top;
+#endif
     /* One guard page for the exception check */
     uint8 *exce_check_guard_page;
 #endif
@@ -154,6 +181,11 @@ typedef struct WASMExecEnv {
     /* The WASM stack size */
     uint32 wasm_stack_size;
 
+#ifdef __CHERI__
+    // On CHERI, we will manage the WASM stack ourselves
+    WASMCheriStack_t* __capability wasm_stack_p __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+
+#else
     /* The WASM stack of current thread */
     union {
         uint64 __make_it_8_byte_aligned_;
@@ -169,7 +201,13 @@ typedef struct WASMExecEnv {
             uint8 bottom[1];
         } s;
     } wasm_stack;
+#endif
+
+#ifdef __CHERI__
+} WASMExecEnv __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
 } WASMExecEnv;
+#endif
 
 #if WASM_ENABLE_MEMORY_PROFILING != 0
 #define RECORD_STACK_USAGE(e, p)               \
@@ -205,10 +243,43 @@ wasm_exec_env_destroy(WASMExecEnv *exec_env);
  * @return the WASM frame if there is enough space in the stack area
  * with a protection area, NULL otherwise
  */
-static inline void *
-wasm_exec_env_alloc_wasm_frame(WASMExecEnv *exec_env, unsigned size)
+#ifdef __CHERI__
+static inline void * __capability
+wasm_exec_env_alloc_wasm_frame(WASMExecEnv* exec_env, size_t size)
 {
-    uint8 *addr = exec_env->wasm_stack.s.top;
+    // Size must be aligned
+    bh_assert(cheri_is_aligned(size, __BIGGEST_ALIGNMENT__));
+
+    // On CHERI, we want the frame to start on an aligned address and be an aligned size
+    exec_env->wasm_stack_p->top = cheri_align_up(exec_env->wasm_stack_p->top, __BIGGEST_ALIGNMENT__);
+
+    void* __capability addr = exec_env->wasm_stack_p->top;
+
+    if (size * 2 > ((uintptr_t)exec_env->wasm_stack_p->top_boundary - (uintptr_t)addr))
+    {
+        /* WASM stack overflow. */
+        return NULL;
+    }
+
+    exec_env->wasm_stack_p->top += size;
+
+#if WASM_ENABLE_MEMORY_PROFILING != 0
+    {
+        size_t wasm_stack_used =
+            (uintptr_t)exec_env->wasm_stack_p->top - (uintptr_t)exec_env->wasm_stack_p->bottom;
+        if (wasm_stack_used > exec_env->max_wasm_stack_used)
+            exec_env->max_wasm_stack_used = wasm_stack_used;
+    }
+#endif
+
+    return addr;
+}
+
+#else   /* __CHERI__ */
+static inline void*
+wasm_exec_env_alloc_wasm_frame(WASMExecEnv * exec_env, unsigned size)
+{
+    uint8* addr = exec_env->wasm_stack.s.top;
 
     bh_assert(!(size & 3));
 
@@ -234,14 +305,22 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv *exec_env, unsigned size)
             exec_env->max_wasm_stack_used = wasm_stack_used;
     }
 #endif
-    return addr;
+
+    return (void*)addr;
 }
+#endif /* __CHERI__ */
+
 
 static inline void
-wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *prev_top)
+wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *__capability prev_top)
 {
-    bh_assert((uint8 *)prev_top >= exec_env->wasm_stack.s.bottom);
-    exec_env->wasm_stack.s.top = (uint8 *)prev_top;
+#ifdef __CHERI__
+    bh_assert((uintptr_t)prev_top >= (uintptr_t)exec_env->wasm_stack_p->bottom);
+    exec_env->wasm_stack_p->top = (uint8*__capability)prev_top;
+#else
+    bh_assert((uint8*)prev_top >= exec_env->wasm_stack.s.bottom);
+    exec_env->wasm_stack.s.top = (uint8*)prev_top;
+#endif
 }
 
 /**
@@ -254,7 +333,11 @@ wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *prev_top)
 static inline void *
 wasm_exec_env_wasm_stack_top(WASMExecEnv *exec_env)
 {
+#ifdef __CHERI__
+    return (void*)exec_env->wasm_stack_p->top;
+#else
     return exec_env->wasm_stack.s.top;
+#endif
 }
 
 /**

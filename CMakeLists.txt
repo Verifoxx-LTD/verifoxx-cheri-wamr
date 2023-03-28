@@ -12,5 +12,10 @@ if (NOT DEFINED WAMR_BUILD_PLATFORM)
     message(FATAL_ERROR "When using cmake on root you must define WAMR_BUILD_PLATFORM")
 endif ()
 
+if ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
 add_subdirectory(product-mini/platforms/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/${WAMR_BUILD_PLATFORM})
+else ()
+add_subdirectory(frontend)
+endif ()
+
 

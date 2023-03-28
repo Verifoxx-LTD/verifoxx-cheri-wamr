@@ -2237,7 +2237,12 @@ call_wasm_with_hw_bound_check(WASMModuleInstance *module_inst,
     uint32 page_size = os_getpagesize();
     uint32 guard_page_count = STACK_OVERFLOW_CHECK_GUARD_PAGE_COUNT;
     WASMRuntimeFrame *prev_frame = wasm_exec_env_get_cur_frame(exec_env);
-    uint8 *prev_top = exec_env->wasm_stack.s.top;
+
+#ifdef __CHERI__
+    uint8 *__capability prev_top = exec_env->wasm_stack_p->top;
+#else
+    uint8* prev_top = exec_env->wasm_stack.s.top;
+#endif
 #ifdef BH_PLATFORM_WINDOWS
     const char *exce;
     int result;
@@ -2304,7 +2309,12 @@ call_wasm_with_hw_bound_check(WASMModuleInstance *module_inst,
 #endif
         /* Restore operand frames */
         wasm_exec_env_set_cur_frame(exec_env, prev_frame);
+
+#ifdef __CHERI__
+        exec_env->wasm_stack_p->top = prev_top;
+#else
         exec_env->wasm_stack.s.top = prev_top;
+#endif
     }
 
     jmpbuf_node_pop = wasm_exec_env_pop_jmpbuf(exec_env);

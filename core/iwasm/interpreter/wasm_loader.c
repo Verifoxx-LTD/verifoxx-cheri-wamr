@@ -5066,7 +5066,11 @@ typedef struct BranchBlock {
      * pop any type of value directly without decreasing stack top pointer
      * and stack cell num. */
     bool is_stack_polymorphic;
-} BranchBlock;
+#ifdef __CHERI__
+} BranchBlock __attribute__((aligned));
+#else
+} BranchBlock __attribute__((align(__BIGGEST_ALIGNMENT__)));
+#endif
 
 typedef struct WASMLoaderContext {
     /* frame ref stack */

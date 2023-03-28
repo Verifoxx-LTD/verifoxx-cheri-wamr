@@ -225,10 +225,15 @@ typedef struct WASMImport {
         WASMMemoryImport memory;
         WASMGlobalImport global;
         struct {
-            char *module_name;
-            char *field_name;
-        } names;
+            char* module_name;
+            char* field_name;
+#ifdef __CHERI__
+        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
+    } u __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
+        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
     } u;
+#endif
 } WASMImport;
 
 struct WASMFunction {
@@ -248,11 +253,18 @@ struct WASMFunction {
     uint16 local_cell_num;
     /* offset of each local, including function parameters
        and local variables */
+#ifdef __CHERI__
+    uint16 __pad__; // alignment
+#endif
     uint16 *local_offsets;
 
     uint32 max_stack_cell_num;
     uint32 max_block_num;
     uint32 code_size;
+#ifdef __CHERI__
+    uint32 __pad1__; // alignment
+#endif
+
     uint8 *code;
 #if WASM_ENABLE_FAST_INTERP != 0
     uint32 code_compiled_size;
@@ -364,7 +376,11 @@ typedef struct BrTableCache {
     /* Address of br_table opcode */
     uint8 *br_table_op_addr;
     uint32 br_count;
+#ifdef __CHERI__
+    uint32 br_depths[1] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     uint32 br_depths[1];
+#endif
 } BrTableCache;
 
 #if WASM_ENABLE_DEBUG_INTERP != 0
@@ -613,7 +629,11 @@ typedef struct BlockType {
     union {
         uint8 value_type;
         WASMType *type;
+#ifdef __CHERI__
+    } u __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     } u;
+#endif
     bool is_value_type;
 } BlockType;
 

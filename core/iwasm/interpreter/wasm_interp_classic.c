@@ -857,7 +857,7 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
         frame->function->total_exec_cnt++;
     }
 #endif
-    wasm_exec_env_free_wasm_frame(exec_env, frame);
+    wasm_exec_env_free_wasm_frame(exec_env, (void *__capability)frame);
 }
 
 static void
@@ -3865,6 +3865,30 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
             }
 
             /* Initialize the interpreter context. */
+
+#ifdef __CHERI__
+            // Keep alignment on CHERI
+
+            frame->function = cur_func;
+            frame_ip = wasm_get_func_code(cur_func);
+            frame_ip_end = wasm_get_func_code_end(cur_func);
+            frame_lp = frame->lp;
+
+            frame_sp = frame->sp_bottom =
+                cheri_align_up(frame_lp + cur_func->param_cell_num + cur_func->local_cell_num, __BIGGEST_ALIGNMENT__);
+
+            frame->sp_boundary =
+                cheri_align_up(frame->sp_bottom + cur_wasm_func->max_stack_cell_num, __BIGGEST_ALIGNMENT__);
+
+            frame_csp = frame->csp_bottom =
+                (WASMBranchBlock *)frame->sp_boundary;
+            frame->csp_boundary =
+                cheri_align_up(frame->csp_bottom + cur_wasm_func->max_block_num, __BIGGEST_ALIGNMENT__);
+
+            /* Initialize the local variables */
+            memset(frame_lp + cur_func->param_cell_num, 0,
+                   (uint32)(cur_func->local_cell_num * 4));
+#else
             frame->function = cur_func;
             frame_ip = wasm_get_func_code(cur_func);
             frame_ip_end = wasm_get_func_code_end(cur_func);
@@ -3876,13 +3900,15 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                 frame->sp_bottom + cur_wasm_func->max_stack_cell_num;
 
             frame_csp = frame->csp_bottom =
-                (WASMBranchBlock *)frame->sp_boundary;
+                (WASMBranchBlock*)frame->sp_boundary;
             frame->csp_boundary =
                 frame->csp_bottom + cur_wasm_func->max_block_num;
 
             /* Initialize the local variables */
             memset(frame_lp + cur_func->param_cell_num, 0,
-                   (uint32)(cur_func->local_cell_num * 4));
+                (uint32)(cur_func->local_cell_num * 4));
+#endif
+
 
             /* Push function block as first block */
             cell_num = func_type->ret_cell_num;
@@ -4169,8 +4195,13 @@ wasm_interp_call_wasm(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
     /* There is no local variable. */
     frame->sp = frame->lp + 0;
 
-    if ((uint8 *)(outs_area->lp + function->param_cell_num)
-        > exec_env->wasm_stack.s.top_boundary) {
+#ifdef __CHERI__
+    if ((uintptr_t)(outs_area->lp + function->param_cell_num) >
+        (uintptr_t)exec_env->wasm_stack_p->top_boundary) {
+#else
+    if ((uint8 *)(outs_area->lp + function->param_cell_num) >
+        exec_env->wasm_stack.s.top_boundary) {
+#endif
         wasm_set_exception(module_inst, "wasm operand stack overflow");
         return;
     }

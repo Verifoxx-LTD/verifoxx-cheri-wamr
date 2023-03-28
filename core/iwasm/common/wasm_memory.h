@@ -23,6 +23,10 @@ wasm_runtime_memory_destroy();
 unsigned
 wasm_runtime_memory_pool_size();
 
+bool
+wasm_memory_init_with_allocator(void* _malloc_func, void* _realloc_func,
+    void* _free_func);
+
 #ifdef __cplusplus
 }
 #endif

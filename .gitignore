@@ -35,3 +35,4 @@ tests/benchmarks/coremark/coremark*
 
 samples/workload/include/**
 !samples/workload/include/.gitkeep
+doxygen-doc
