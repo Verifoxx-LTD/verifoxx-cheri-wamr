@@ -228,13 +228,15 @@ typedef struct WASMImport {
             char* module_name;
             char* field_name;
 #ifdef __CHERI__
-        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
+        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
     } u __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+} WASMImport __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
-        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
+        } names;
     } u;
-#endif
 } WASMImport;
+#endif
+
 
 struct WASMFunction {
 #if WASM_ENABLE_CUSTOM_NAME_SECTION != 0

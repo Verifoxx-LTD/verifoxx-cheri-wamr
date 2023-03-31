@@ -339,7 +339,11 @@ struct WASMModuleInstance {
      * +------------------------------+
      */
     union {
+#if __CHERI__
+        uintptr_t _make_it_16_byte_aligned_;
+#else
         uint64 _make_it_8_byte_aligned_;
+#endif
         WASMMemoryInstance memory_instances[1];
         uint8 bytes[1];
     } global_table_data;

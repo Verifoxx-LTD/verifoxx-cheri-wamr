@@ -84,12 +84,17 @@ public:
         */
     }
 
+    // Allocate linear memory
+    void* __capability alloc_linear_memory(size_t sz);
+
     bool wasm_memory_init()
     {
         if (wasm_memory_init_with_allocator((void*)m_malloc_func, (void*)m_realloc_func, (void*)m_free_func)
             && wasm_runtime_set_default_running_mode(Mode_Interp)
             && wasm_native_init()
+#ifdef OS_ENABLE_HW_BOUND_CHECK
             && runtime_signal_init()
+#endif
             )
         {
             return true;

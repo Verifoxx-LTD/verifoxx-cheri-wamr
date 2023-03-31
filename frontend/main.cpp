@@ -21,13 +21,9 @@
 #include "wasm_native.h"
 #include "wasm_runtime_common.h"
 #include "cheri_mem_mgmt.h"
+#include "cheri_mem_mgmt_c_api.h"
 
 using namespace std;
-
-// Reference to the CheriMemMgr instance
-CheriMemMgr* mem_mgr_instance = nullptr;
-
-
 
 class CRunnerException : public std::runtime_error
 {
@@ -109,8 +105,7 @@ public:
         }
 
         wasm_runtime_destroy();
-        delete mem_mgr_instance;
-        mem_mgr_instance = nullptr;
+        delete_cheri_mem_mgr(); // Destroy the C API version
     }
 
     bool Run(bool expect_return_val = false, int64_t argc = 0, char *argv[] = nullptr)
@@ -173,33 +168,17 @@ protected:
     {
         try
         {
-            mem_mgr_instance = new CheriMemMgr{ STACK_SIZE, HEAP_SIZE};
+            auto mem_mgr_instance = create_cheri_mem_mgr(STACK_SIZE, HEAP_SIZE); // Call through the C version to set up the mem_mgr for C
             mem_mgr_instance->setup_wasm_stack();
             mem_mgr_instance->wasm_memory_init();
+            return true;
         }
         catch (exception&)
         {
             cout << "Cheri Mem Manager failed" << endl;
-            if (mem_mgr_instance)
-            {
-                mem_mgr_instance->cleanup_wasm_stack();
-            }
             return false;
         }
 
-
-        if (wasm_memory_init_with_allocator((void*)malloc, nullptr, (void*)free)
-            && wasm_runtime_set_default_running_mode(Mode_Interp)
-            && wasm_native_init()
-            && runtime_signal_init()
-            )
-        {
-            return true;
-        }
-
-        wasm_runtime_memory_destroy();
-        return false;
-        
     }
 };
 
@@ -207,9 +186,9 @@ int main(int argc, char* argv[])
 {
     cout << "Launching default WAMR-APP front end" << endl;
 
-    if (argc < 3)
+    if (argc < 2)
     {
-        cerr << "Usage: " << argv[0] << "<wasm-file> <fn|main> [param1 param2 param3...]" << endl;
+        cerr << "Usage: " << argv[0] << "<wasm-file> [<fn_to_run_default_main>] [param1 param2 param3...]" << endl;
         return -1;
     }
 
@@ -237,13 +216,13 @@ int main(int argc, char* argv[])
     }
     fin.close();
 
-    string fn_name{ argv[2] };
+    string fn_name{ argc==2 ? "main" : argv[2]};
 
     try
     {
         Runner runner{ buff, fn_name };
 
-        int exitCode = runner.Run(true, argc - 2, (argc > 2) ? &argv[3] : nullptr) ? 0 : -1;
+        int exitCode = runner.Run(true, argc - 3, (argc > 3) ? &argv[3] : nullptr) ? 0 : -1;
         return exitCode;
     }
     catch (CRunnerException &ex)
