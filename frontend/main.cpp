@@ -2,7 +2,6 @@
  * Copyright (C) 2023 Verifoxx Limited
  * Main program for the wamr-app frontend
  */
-
 #include <iostream>
 #include <fstream>
 #include <cstddef>
@@ -22,6 +21,8 @@
 #include "wasm_runtime_common.h"
 #include "cheri_mem_mgmt.h"
 #include "cheri_mem_mgmt_c_api.h"
+
+#include "cheri_wasm_native_test.h"
 
 using namespace std;
 
@@ -57,7 +58,10 @@ public:
             raise("wasm_init() failed");
         }
 
-
+        if (!do_wasm_register_natives())
+        {
+            raise("wasm_runtime_register_natives() failed");
+        }
 
         /* parse the WASM file from buffer and create a WASM module */
         if (!(m_module = wasm_runtime_load((uint8_t*)module_buff.data(), module_buff.size(), ex_buff.begin(), ex_buff.size())))
@@ -178,6 +182,14 @@ protected:
             cout << "Cheri Mem Manager failed" << endl;
             return false;
         }
+
+    }
+
+    bool do_wasm_register_natives()
+    {
+
+        return wasm_runtime_register_natives("env", native_symbols_table(),
+                    num_native_symbols());
 
     }
 };

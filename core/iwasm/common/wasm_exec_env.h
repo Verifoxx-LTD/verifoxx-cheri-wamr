@@ -38,6 +38,14 @@ typedef struct WASMJmpBuf {
 
 #ifdef __CHERI__
 // @see : cheri_mem_mgmt.h
+
+/* Our stack structure:
+|.................<allocated space>......................|xx|
+^           ^                                             ^
+|           |                                             |
+bottom    -->  top grows -->                        top_boundary
+*/
+
 typedef struct
 {
     uint8* __capability top_boundary;

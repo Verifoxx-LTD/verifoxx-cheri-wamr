@@ -4102,7 +4102,11 @@ static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
 #define MAX_REG_FLOATS 8
 #if defined(BUILD_TARGET_AARCH64) || defined(BUILD_TARGET_RISCV64_LP64D) \
     || defined(BUILD_TARGET_RISCV64_LP64)
+#if ENABLE_CHERI_PURECAP
+#define MAX_REG_INTS 7  /* For CHERI PureCap, first argument in reg c0 is the exec env */
+#else
 #define MAX_REG_INTS 8
+#endif
 #else
 #define MAX_REG_INTS 6
 #endif /* end of defined(BUILD_TARGET_AARCH64)   \
@@ -4189,11 +4193,11 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            uint32 *argv_ret)
 {
     // The args structure is different than other targets for CHERI...
-    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8), following given in bytes:
-    // argv[0..15]     : CPtr exec_env (128-bit)
+    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 7), following given in bytes:
+    // argv[0..15]     : CPtr exec_env (128-bit)    => c0
     // argv[16..79]    : fps (x8)
-    // argv[80..207]   : ints (x8)
-    // argv[208..463]  : stack args (x16 max) *could* be a capability pointer
+    // argv[80..191]   : ints (x7)  => c1..c7
+    // argv[192..448]  : stack args (x16 max) *could* be a capability pointer
 
     // Copying stack arguments on Morello:
     // This is complex.  All arguments are stored on the stack as 64-bit apart from capabilities which are 128-bit.
@@ -4459,7 +4463,7 @@ wasm_runtime_invoke_native(WASMExecEnv* exec_env, void* func_ptr,
 #endif /* end of BUILD_TARGET_RISCV64_LP64 */
     uint64 size;
 
-    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    // Note that on CHERI, n_stacks means BYTES of stack used.
+    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    
     uint32 arg_i32, ptr_len;
     uint32 result_count = func_type->result_count;
     uint32 ext_ret_count = result_count > 1 ? result_count - 1 : 0;

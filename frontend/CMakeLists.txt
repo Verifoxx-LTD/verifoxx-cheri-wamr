@@ -86,7 +86,7 @@ endif ()
 # Set Build flags for the targetted architecture
 if (CHERI_PURECAP)
     message(STATUS "CHERI pure-cap mode enabled")
-    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")# -fpack-struct=16 -mstrict-align ")
+    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")
 else ()
     message(STATUS "CHERI hybrid capability mode enabled")
     set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
@@ -225,8 +225,10 @@ target_sources(${PROJECT_NAME} PRIVATE
     "cheri_mem_mgmt_c_api.h"
     "cheri_mem_mgmt.h"
     "cheri_mem_mgmt.cpp"
+    "cheri_wasm_native_test.h"
+    "cheri_wasm_native_test.cpp"
     "${WAMR_RUNTIME_LIB_SOURCE}"
- )
+  )
 
 target_link_options(${PROJECT_NAME} PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker ${PROJECT_NAME}.map" ${CHERI_STATIC_LINK_FINAL})
 
