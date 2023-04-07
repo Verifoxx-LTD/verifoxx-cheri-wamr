@@ -365,7 +365,7 @@ wasm_runtime_addr_app_to_native(WASMModuleInstanceCommon *module_inst_comm,
     }
 
 #ifdef ENABLE_CHERI_PURECAP
-    LOG_WARNING("wasm_runtime_addr_app_to_native(): Returning WASM capability to native, to do protect this!");
+    LOG_VERBOSE("wasm_runtime_addr_app_to_native(): Returning WASM capability to native, to do protect this!");
     addr = memory_inst->memory_data + (size_t)app_offset;
 
     if (cheri_base_get(memory_inst->memory_data) == cheri_base_get(memory_inst->memory_data_end)

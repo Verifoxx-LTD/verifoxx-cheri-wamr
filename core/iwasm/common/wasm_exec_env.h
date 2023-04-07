@@ -258,6 +258,10 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv* exec_env, size_t size)
     // Size must be aligned
     bh_assert(cheri_is_aligned(size, __BIGGEST_ALIGNMENT__));
 
+    LOG_VERBOSE("Alloc frame++: Stack top addr=0x%" PRIx64
+        ", Boundary = 0x%" PRIx64
+        ", size = %d\n", exec_env->wasm_stack_p->top, exec_env->wasm_stack_p->top_boundary, size);
+
     // On CHERI, we want the frame to start on an aligned address and be an aligned size
     exec_env->wasm_stack_p->top = cheri_align_up(exec_env->wasm_stack_p->top, __BIGGEST_ALIGNMENT__);
 
@@ -279,6 +283,8 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv* exec_env, size_t size)
             exec_env->max_wasm_stack_used = wasm_stack_used;
     }
 #endif
+
+    LOG_VERBOSE("Alloc frame--: Returned addr=0x%" PRIx64 "\n", addr);
 
     return addr;
 }

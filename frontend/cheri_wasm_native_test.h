@@ -3,12 +3,14 @@
 #ifndef _CHERI_WASM_NATIVE_TEST_H_
 #define _CHERI_WASM_NATIVE_TEST_H_
 
-#include <cstdint>
 #include "wasm_export.h"
 
 #ifdef __cplusplus
+#include <cstdint>
 extern "C"
 {
+#else
+#include <stdint.h>
 #endif
 
 NativeSymbol* native_symbols_table();

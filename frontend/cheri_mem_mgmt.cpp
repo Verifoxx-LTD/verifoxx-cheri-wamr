@@ -2,6 +2,7 @@
 #include "cheri_mem_mgmt_c_api.h"
 #include <cstdlib>
 #include <iostream>
+#include <cstring>
 
 static CheriMemMgr* mem_mgr = nullptr;
 
@@ -44,31 +45,43 @@ extern "C" size_t cheri_wasm_get_stack_size()
 
 void* __capability CheriMemMgr::cheri_malloc(size_t sz_bytes)
 {
-    std::cout << "cheri_malloc() called: alloc " << sz_bytes << " bytes" << std::endl;
+    LOG_VERBOSE("cheri_malloc() called: alloc %d bytes\n", sz_bytes);
 
 #if ENABLE_CHERI_PURECAP
-    return malloc(sz_bytes);
+    void *addr = malloc(sz_bytes);
 #else
     void* allocd_p = malloc(sz_bytes);
-    return cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
+    void *__capability addr = cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
 #endif
+    if (addr)
+    {
+        std::memset(addr, 0, sz_bytes);
+    }
+    return addr;
 }
 
 void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_bytes)
 {
-    std::cout << "cheri_malloc() called: realloc " << sz_bytes << " bytes" << std::endl;
+    LOG_VERBOSE("cheri_realloc() called: realloc %d bytes\n", sz_bytes);
 
+    size_t curr_size = cheri_length_get(ptr);
 #if ENABLE_CHERI_PURECAP
-    return realloc(ptr, sz_bytes);
+    void *addr = realloc(ptr, sz_bytes);
 #else
     void* allocd_p = realloc((void*)cheri_address_get(ptr), sz_bytes);
-    return cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
+    void *__capability addr = cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
 #endif
+    if (sz_bytes > curr_size)
+    {
+        // Zero the uninitialized bit
+        std::memset(&((uint8_t*)addr)[sz_bytes], 0, sz_bytes - curr_size);
+    }
+    return addr;
 }
 
  void CheriMemMgr::cheri_free(void* __capability ptr)
 {
-    std::cout << "cheri_malloc() called: free"<< std::endl;
+    LOG_VERBOSE("cheri_free() called");
 
 #if ENABLE_CHERI_PURECAP
     free(ptr);
@@ -79,8 +92,8 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
 
  void* __capability CheriMemMgr::alloc_linear_memory(size_t sz)
  {
-     std::cout << "Allocating linear memory of size " << sz << " bytes" << std::endl;
-     std::cout << "TODO: set this up from a central map, restricted to the module sandbox" << std::endl;
+     std::cout << "WAMR-app: allocates linear memory of size " << sz << " bytes" << std::endl;
+     LOG_VERBOSE("TODO: set this up from a central map, restricted to the module sandbox");
 
      return cheri_malloc(sz);
  }

@@ -64,6 +64,7 @@ public:
         }
 
         /* parse the WASM file from buffer and create a WASM module */
+        cout << "WAMR-app: Loading module..." << endl;
         if (!(m_module = wasm_runtime_load((uint8_t*)module_buff.data(), module_buff.size(), ex_buff.begin(), ex_buff.size())))
         {
             raise("wasm_runtime_load failed!");
@@ -86,7 +87,12 @@ public:
 
         if (fn_name != "main")
         {
+            cout << "WAMR-app: Will execute function \"" << fn_name << "\"" << endl;
             m_fn = wasm_runtime_lookup_function(m_module_inst, fn_name.c_str(), NULL);
+        }
+        else
+        {
+            cout << "WAMR-app: Will execute function: main()" << endl;
         }
     }
 
@@ -117,10 +123,10 @@ public:
         bool result;
         uint32_t retval = 0;
 
+        cout << "WAMR-app: Executing WASM Module..." << endl;
         if (m_fn)
         {
-            cout << "Running Function" << endl;
-
+            
             // Convert arguments to a list of integers
             vector<uint32_t> params;
 
@@ -137,21 +143,20 @@ public:
         }
         else
         {
-            cout << "Running main()" << endl;
             result = wasm_application_execute_main(m_module_inst, argc, argv);
             if (result)
             {
                 retval = wasm_runtime_get_wasi_exit_code(m_module_inst);
             }
         }
-            
+
         if (!result)
         {
-            cerr << "Failed to run!: Exception -> " << wasm_runtime_get_exception(m_module_inst) << endl;
+            cerr << "WAMR-app: Module execution failed!: Exception -> " << wasm_runtime_get_exception(m_module_inst) << endl;
         }
         else
         {
-            cout << "WASM execution: result ";
+            cout << "WAMR-app: Run completes ok! Function return value=";
                 
             if (expect_return_val)
             {
@@ -159,7 +164,7 @@ public:
             }
             else
             {
-                cout << "not applicable";
+                cout << "<none>";
             }
             cout << endl;
         }
@@ -179,7 +184,7 @@ protected:
         }
         catch (exception&)
         {
-            cout << "Cheri Mem Manager failed" << endl;
+            cerr << "Cheri Mem Manager failed" << endl;
             return false;
         }
 
@@ -187,23 +192,22 @@ protected:
 
     bool do_wasm_register_natives()
     {
-
-        return wasm_runtime_register_natives("env", native_symbols_table(),
-                    num_native_symbols());
-
+        return wasm_runtime_register_natives("env", native_symbols_table(), num_native_symbols());
     }
 };
 
 int main(int argc, char* argv[])
 {
-    cout << "Launching default WAMR-APP front end" << endl;
+    cout << endl << "**** WAMR-APP: C++ front end to run WAMR ****" << endl;
+    cout << "WAMR-app is starting up..." << endl;
 
     if (argc < 2)
     {
-        cerr << "Usage: " << argv[0] << "<wasm-file> [<fn_to_run_default_main>] [param1 param2 param3...]" << endl;
+        cerr << "Usage: " << argv[0] << " <wasm-file> [<fn_to_run_default_main>] [param1 param2 param3...]" << endl;
         return -1;
     }
 
+    cout << "WAMR-app: Loading " << argv[1] << "..." << endl;
     ifstream fin(argv[1], ios::in | ios::binary | ios::ate);
     if (!fin.good())
     {
@@ -212,7 +216,7 @@ int main(int argc, char* argv[])
     }
 
     // Enable all logging in the VM lib
-    bh_log_set_verbose_level(BH_LOG_LEVEL_VERBOSE);
+    bh_log_set_verbose_level(BH_LOG_LEVEL_WARNING);
 
     fin.seekg(0, std::ios::end);
     auto sz = fin.tellg();
@@ -232,9 +236,12 @@ int main(int argc, char* argv[])
 
     try
     {
+        cout << "WAMR-app: Module loaded, WAMR Initialising..." << endl;
         Runner runner{ buff, fn_name };
 
         int exitCode = runner.Run(true, argc - 3, (argc > 3) ? &argv[3] : nullptr) ? 0 : -1;
+        cout << "WAMR-app: Exiting, returning: " << exitCode << endl;
+        cout << "*** End ***" << endl << endl;
         return exitCode;
     }
     catch (CRunnerException &ex)

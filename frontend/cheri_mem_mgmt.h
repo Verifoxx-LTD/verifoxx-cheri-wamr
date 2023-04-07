@@ -3,13 +3,15 @@
 #ifndef _CHERI_MEM_MGMT_H_
 #define _CHERI_MEM_MGMT_H_
 
+#include <iostream>
+#include <cheriintrin.h>
+
 #include "wasm_exec_env.h"
 #include "wasm_export.h"
 #include "wasm_memory.h"
 #include "wasm_native.h"
 #include "wasm_runtime_common.h"
 
-#include <cheriintrin.h>
 
 class CheriMemMgr
 {
@@ -65,6 +67,7 @@ public:
 
         // Allocate the actual stack.  Note - to avoid the top boundary being out of bounds, allocate extra space
         // Adjust stack size to be 16 byte aligned
+        std::cout << "WAMR-app: allocates stack of size " << m_stack_size << " bytes" << std::endl;
         m_stack = (uint8 * __capability)m_malloc_func(m_stack_size + CHERI_ALIGNMENT);
         m_stack = cheri_perms_and(m_stack, WASM_STACK_PERMS);
 

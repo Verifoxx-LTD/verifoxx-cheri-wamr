@@ -2,7 +2,6 @@
  * Copyright (C) 2019 Intel Corporation.  All rights reserved.
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
-
 #include "wasm_interp.h"
 #include "bh_log.h"
 #include "wasm_runtime.h"
@@ -882,7 +881,13 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
 
     frame->function = cur_func;
     frame->ip = NULL;
+
+#ifdef __CHERI__
+    // Keep alignment on CHERI
+    frame->sp = cheri_align_up(frame->lp + local_cell_num, __BIGGEST_ALIGNMENT__);
+#else
     frame->sp = frame->lp + local_cell_num;
+#endif
 
     wasm_exec_env_set_cur_frame(exec_env, frame);
 
@@ -3888,6 +3893,10 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
             /* Initialize the local variables */
             memset(frame_lp + cur_func->param_cell_num, 0,
                    (uint32)(cur_func->local_cell_num * 4));
+
+            LOG_VERBOSE("After setup frame, frame=0x%" PRIx64 ", frame_lp=0x%" PRIx64 ", frame_sp = 0x % " PRIx64 "\n",
+                frame, frame_lp, frame_sp);
+
 #else
             frame->function = cur_func;
             frame_ip = wasm_get_func_code(cur_func);

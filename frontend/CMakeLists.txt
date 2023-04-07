@@ -228,7 +228,7 @@ target_sources(${PROJECT_NAME} PRIVATE
     "cheri_wasm_native_test.h"
     "cheri_wasm_native_test.cpp"
     "${WAMR_RUNTIME_LIB_SOURCE}"
-  )
+   )
 
 target_link_options(${PROJECT_NAME} PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker ${PROJECT_NAME}.map" ${CHERI_STATIC_LINK_FINAL})
 
