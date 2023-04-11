@@ -35,7 +35,7 @@ public:
 class Runner
 {
     static constexpr size_t EXCEPTION_ARR_SIZE = 250;
-    static constexpr size_t STACK_SIZE = 8092;
+    static constexpr size_t STACK_SIZE = 8092 * 2;
     static constexpr size_t HEAP_SIZE = 8092;
 
     wasm_module_t m_module = nullptr;
@@ -216,7 +216,7 @@ int main(int argc, char* argv[])
     }
 
     // Enable all logging in the VM lib
-    bh_log_set_verbose_level(BH_LOG_LEVEL_WARNING);
+    bh_log_set_verbose_level(BH_LOG_LEVEL_DEBUG);
 
     fin.seekg(0, std::ios::end);
     auto sz = fin.tellg();
