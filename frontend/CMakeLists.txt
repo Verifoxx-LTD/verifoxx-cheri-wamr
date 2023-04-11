@@ -125,6 +125,11 @@ endif ()
 message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 
 # Configure WAMR features
+if (NOT DEFINED WAMR_BUILD_MEMORY_TRACING)
+set (WAMR_BUILD_MEMORY_TRACING 1)  # Enable by default
+endif ()
+
+
 if (NOT DEFINED WAMR_BUILD_INTERP)
   # Enable Interpreter by default
   set (WAMR_BUILD_INTERP 1)

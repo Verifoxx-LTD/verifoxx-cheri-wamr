@@ -1431,12 +1431,21 @@ wasm_runtime_dump_module_inst_mem_consumption(
 void
 wasm_runtime_dump_exec_env_mem_consumption(const WASMExecEnv *exec_env)
 {
+#ifdef __CHERI__
+    uint32 total_size = sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+        + exec_env->wasm_stack_size;
+#else
     uint32 total_size =
         offsetof(WASMExecEnv, wasm_stack.s.bottom) + exec_env->wasm_stack_size;
-
+#endif
     os_printf("Exec env memory consumption, total size: %u\n", total_size);
     os_printf("    exec env struct size: %u\n",
+#ifdef __CHERI__
+              sizeof(WASMExecEnv));
+#else
               offsetof(WASMExecEnv, wasm_stack.s.bottom));
+#endif
+
 #if WASM_ENABLE_INTERP != 0 && WASM_ENABLE_FAST_INTERP == 0
     os_printf("        block addr cache size: %u\n",
               sizeof(exec_env->block_addr_cache));
@@ -1471,8 +1480,11 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         wasm_get_module_inst_mem_consumption(wasm_module_inst,
                                              &module_inst_mem_consps);
         wasm_get_module_mem_consumption(wasm_module, &module_mem_consps);
+
+#if WASM_ENABLE_MEMORY_PROFILING != 0
         if (wasm_module_inst->module->aux_stack_top_global_index != (uint32)-1)
             max_aux_stack_used = wasm_module_inst->e->max_aux_stack_used;
+#endif
     }
 #endif
 #if WASM_ENABLE_AOT != 0
@@ -1497,7 +1509,12 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         app_heap_peak_size = gc_get_heap_highmark_size(heap_handle);
     }
 
-    total_size = offsetof(WASMExecEnv, wasm_stack.s.bottom)
+    total_size = 
+#ifdef __CHERI__
+                sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+#else
+                offsetof(WASMExecEnv, wasm_stack.s.bottom)
+#endif
                  + exec_env->wasm_stack_size + module_mem_consps.total_size
                  + module_inst_mem_consps.total_size;
 
@@ -1508,8 +1525,11 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
     os_printf("\nTotal memory consumption of module, module inst and "
               "exec env: %u\n",
               total_size);
+
+#if WASM_ENABLE_MEMORY_PROFILING != 0
     os_printf("Total interpreter stack used: %u\n",
               exec_env->max_wasm_stack_used);
+#endif
 
     if (max_aux_stack_used != (uint32)-1)
         os_printf("Total auxiliary stack used: %u\n", max_aux_stack_used);
