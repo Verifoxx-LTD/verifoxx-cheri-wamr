@@ -9,6 +9,23 @@ The version in "sandbox" is latest bleeding-edge changes intended to try and fix
 
 **IMPORTANT:** At the moment, iwasm build is not working with linux-cheri-purecap.  Instead, build the WAMR front end by setting WAMR_APP=1 in your CMake options.
 
+# Addendum - Building WAMR front end
+Currently, iwasm is not able to build for CHERI.  This is due to changes to allocate WAMR's memory outside the main app.
+
+Instead, a wamr_app front end is built.  To do this, pass additional flag to CMake or add to CMakePresets.json as follows:
+    WAMR_APP=1
+	
+This will cause CMakeLists.txt in *frontend/* to be included which will build wamr-app instead of iwasm.  Note that wamr-app does not include the *libvm* instead all source code is built into the application.
+
+Basic usage of wamr-app:
+``` Bash
+wamr-app <wasm_file_to_execute>
+```
+
+For full usage run *wamr-app* with no arguments.
+
+wamr-app is functional only in classic interpreter mode, verbose logging is enabled (and cannot be changed) and stack and app heap size are fixed.
+
 
 ## Building CHERI-WAMR with CMake
 You can build from the root folder directly with CMake, but this requires a number of flags to configure WAMR and the build system.

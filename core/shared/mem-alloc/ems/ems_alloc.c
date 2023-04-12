@@ -209,11 +209,12 @@ gci_add_fc(gc_heap_t *heap, hmu_t *hmu, gc_size_t size)
     bh_assert(gci_is_heap_valid(heap));
     bh_assert(hmu && (gc_uint8 *)hmu >= heap->base_addr
               && (gc_uint8 *)hmu < heap->base_addr + heap->current_size);
-    bh_assert(((gc_uint32)(uintptr_t)hmu_to_obj(hmu) & 7) == 0);
+
+    bh_assert(((gc_uint32)(uintptr_t)hmu_to_obj(hmu) & GC_ALIGNMENT_SIZE_MASK) == 0);
     bh_assert(size > 0
               && ((gc_uint8 *)hmu) + size
                      <= heap->base_addr + heap->current_size);
-    bh_assert(!(size & 7));
+    bh_assert(!(size & GC_ALIGNMENT_SIZE_MASK));
 
     base_addr = heap->base_addr;
     end_addr = base_addr + heap->current_size;
@@ -291,7 +292,7 @@ alloc_hmu(gc_heap_t *heap, gc_size_t size)
     hmu_t *next, *rest;
 
     bh_assert(gci_is_heap_valid(heap));
-    bh_assert(size > 0 && !(size & 7));
+    bh_assert(size > 0 && !(size & GC_ALIGNMENT_SIZE_MASK));
 
     base_addr = heap->base_addr;
     end_addr = base_addr + heap->current_size;
@@ -321,7 +322,7 @@ alloc_hmu(gc_heap_t *heap, gc_size_t size)
                 return NULL;
             }
             normal_head->next = get_hmu_normal_node_next(p);
-            if (((gc_int32)(uintptr_t)hmu_to_obj(p) & 7) != 0) {
+            if (((gc_int32)(uintptr_t)hmu_to_obj(p) & GC_ALIGNMENT_SIZE_MASK) != 0) {
                 heap->is_heap_corrupted = true;
                 return NULL;
             }
@@ -427,7 +428,7 @@ static hmu_t *
 alloc_hmu_ex(gc_heap_t *heap, gc_size_t size)
 {
     bh_assert(gci_is_heap_valid(heap));
-    bh_assert(size > 0 && !(size & 7));
+    bh_assert(size > 0 && !(size & GC_ALIGNMENT_SIZE_MASK));
 
     return alloc_hmu(heap, size);
 }
@@ -451,7 +452,7 @@ gc_alloc_vo_internal(void *vheap, gc_size_t size, const char *file, int line)
     /* hmu header + prefix + obj + suffix */
     tot_size_unaligned = HMU_SIZE + OBJ_PREFIX_SIZE + size + OBJ_SUFFIX_SIZE;
     /* aligned size*/
-    tot_size = GC_ALIGN_8(tot_size_unaligned);
+    tot_size = GC_ALIGN(tot_size_unaligned);
     if (tot_size < size)
         /* integer overflow */
         return NULL;
@@ -483,7 +484,7 @@ gc_alloc_vo_internal(void *vheap, gc_size_t size, const char *file, int line)
 
     ret = hmu_to_obj(hmu);
     if (tot_size > tot_size_unaligned)
-        /* clear buffer appended by GC_ALIGN_8() */
+        /* clear buffer appended by GC_ALIGN() */
         memset((uint8 *)ret + size, 0, tot_size - tot_size_unaligned);
 
 finish:
@@ -511,7 +512,7 @@ gc_realloc_vo_internal(void *vheap, void *ptr, gc_size_t size, const char *file,
     /* hmu header + prefix + obj + suffix */
     tot_size_unaligned = HMU_SIZE + OBJ_PREFIX_SIZE + size + OBJ_SUFFIX_SIZE;
     /* aligned size*/
-    tot_size = GC_ALIGN_8(tot_size_unaligned);
+    tot_size = GC_ALIGN(tot_size_unaligned);
     if (tot_size < size)
         /* integer overflow */
         return NULL;

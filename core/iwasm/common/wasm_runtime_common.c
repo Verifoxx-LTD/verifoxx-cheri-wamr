@@ -1431,12 +1431,21 @@ wasm_runtime_dump_module_inst_mem_consumption(
 void
 wasm_runtime_dump_exec_env_mem_consumption(const WASMExecEnv *exec_env)
 {
+#ifdef __CHERI__
+    uint32 total_size = sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+        + exec_env->wasm_stack_size;
+#else
     uint32 total_size =
         offsetof(WASMExecEnv, wasm_stack.s.bottom) + exec_env->wasm_stack_size;
-
+#endif
     os_printf("Exec env memory consumption, total size: %u\n", total_size);
     os_printf("    exec env struct size: %u\n",
+#ifdef __CHERI__
+              sizeof(WASMExecEnv));
+#else
               offsetof(WASMExecEnv, wasm_stack.s.bottom));
+#endif
+
 #if WASM_ENABLE_INTERP != 0 && WASM_ENABLE_FAST_INTERP == 0
     os_printf("        block addr cache size: %u\n",
               sizeof(exec_env->block_addr_cache));
@@ -1471,8 +1480,11 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         wasm_get_module_inst_mem_consumption(wasm_module_inst,
                                              &module_inst_mem_consps);
         wasm_get_module_mem_consumption(wasm_module, &module_mem_consps);
+
+#if WASM_ENABLE_MEMORY_PROFILING != 0
         if (wasm_module_inst->module->aux_stack_top_global_index != (uint32)-1)
             max_aux_stack_used = wasm_module_inst->e->max_aux_stack_used;
+#endif
     }
 #endif
 #if WASM_ENABLE_AOT != 0
@@ -1497,7 +1509,12 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         app_heap_peak_size = gc_get_heap_highmark_size(heap_handle);
     }
 
-    total_size = offsetof(WASMExecEnv, wasm_stack.s.bottom)
+    total_size = 
+#ifdef __CHERI__
+                sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+#else
+                offsetof(WASMExecEnv, wasm_stack.s.bottom)
+#endif
                  + exec_env->wasm_stack_size + module_mem_consps.total_size
                  + module_inst_mem_consps.total_size;
 
@@ -1508,8 +1525,11 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
     os_printf("\nTotal memory consumption of module, module inst and "
               "exec env: %u\n",
               total_size);
+
+#if WASM_ENABLE_MEMORY_PROFILING != 0
     os_printf("Total interpreter stack used: %u\n",
               exec_env->max_wasm_stack_used);
+#endif
 
     if (max_aux_stack_used != (uint32)-1)
         os_printf("Total auxiliary stack used: %u\n", max_aux_stack_used);
@@ -4102,7 +4122,11 @@ static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
 #define MAX_REG_FLOATS 8
 #if defined(BUILD_TARGET_AARCH64) || defined(BUILD_TARGET_RISCV64_LP64D) \
     || defined(BUILD_TARGET_RISCV64_LP64)
+#if ENABLE_CHERI_PURECAP
+#define MAX_REG_INTS 7  /* For CHERI PureCap, first argument in reg c0 is the exec env */
+#else
 #define MAX_REG_INTS 8
+#endif
 #else
 #define MAX_REG_INTS 6
 #endif /* end of defined(BUILD_TARGET_AARCH64)   \
@@ -4189,11 +4213,11 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            uint32 *argv_ret)
 {
     // The args structure is different than other targets for CHERI...
-    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8), following given in bytes:
-    // argv[0..15]     : CPtr exec_env (128-bit)
+    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 7), following given in bytes:
+    // argv[0..15]     : CPtr exec_env (128-bit)    => c0
     // argv[16..79]    : fps (x8)
-    // argv[80..207]   : ints (x8)
-    // argv[208..463]  : stack args (x16 max) *could* be a capability pointer
+    // argv[80..191]   : ints (x7)  => c1..c7
+    // argv[192..448]  : stack args (x16 max) *could* be a capability pointer
 
     // Copying stack arguments on Morello:
     // This is complex.  All arguments are stored on the stack as 64-bit apart from capabilities which are 128-bit.
@@ -4459,7 +4483,7 @@ wasm_runtime_invoke_native(WASMExecEnv* exec_env, void* func_ptr,
 #endif /* end of BUILD_TARGET_RISCV64_LP64 */
     uint64 size;
 
-    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    // Note that on CHERI, n_stacks means BYTES of stack used.
+    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    
     uint32 arg_i32, ptr_len;
     uint32 result_count = func_type->result_count;
     uint32 ext_ret_count = result_count > 1 ? result_count - 1 : 0;

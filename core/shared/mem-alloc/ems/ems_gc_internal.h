@@ -13,6 +13,11 @@ extern "C" {
 #include "bh_platform.h"
 #include "ems_gc.h"
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
+
 /* HMU (heap memory unit) basic block type */
 typedef enum hmu_type_enum {
     HMU_TYPE_MIN = 0,
@@ -22,10 +27,6 @@ typedef enum hmu_type_enum {
     HMU_FC = 1,
     HMU_FM = 0
 } hmu_type_t;
-
-typedef struct hmu_struct {
-    gc_uint32 header;
-} hmu_t;
 
 #if BH_ENABLE_GC_VERIFY != 0
 
@@ -79,13 +80,13 @@ hmu_verify(void *vheap, hmu_t *hmu);
 
 #define hmu_obj_size(s) ((s)-OBJ_EXTRA_SIZE)
 
-#define GC_ALIGN_8(s) (((uint32)(s) + 7) & (uint32)~7)
 
 #define GC_SMALLEST_SIZE \
-    GC_ALIGN_8(HMU_SIZE + OBJ_PREFIX_SIZE + OBJ_SUFFIX_SIZE + 8)
+    GC_ALIGN(HMU_SIZE + OBJ_PREFIX_SIZE + OBJ_SUFFIX_SIZE + GC_ALIGNMENT_SIZE)
 #define GC_GET_REAL_SIZE(x)                                 \
-    GC_ALIGN_8(HMU_SIZE + OBJ_PREFIX_SIZE + OBJ_SUFFIX_SIZE \
-               + (((x) > 8) ? (x) : 8))
+    GC_ALIGN(HMU_SIZE + OBJ_PREFIX_SIZE + OBJ_SUFFIX_SIZE \
+               + (((x) > GC_ALIGNMENT_SIZE) ? (x) : GC_ALIGNMENT_SIZE))
+
 
 /**
  * hmu bit operation

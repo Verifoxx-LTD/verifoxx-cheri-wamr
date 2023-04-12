@@ -24,7 +24,7 @@
 #endif
 
 #ifdef __CHERI__
-#include "cheri_mem_mgt_c_api.h"
+#include "cheri_mem_mgmt_c_api.h"
 #endif
 
 WASMExecEnv *

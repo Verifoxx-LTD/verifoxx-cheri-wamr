@@ -52,7 +52,12 @@ gc_handle_t
 gc_init_with_pool(char *buf, gc_size_t buf_size)
 {
     char *buf_end = buf + buf_size;
-    char *buf_aligned = (char *)(((uintptr_t)buf + 7) & (uintptr_t)~7);
+
+#if ENABLE_CHERI_PURECAP
+    char* buf_aligned = cheri_align_up(buf, GC_ALIGNMENT_SIZE);
+#else
+    char* buf_aligned = (char*)(((uintptr_t)buf + GC_ALIGNMENT_SIZE_MASK) & (uintptr_t)~GC_ALIGNMENT_SIZE_MASK);
+#endif
     char *base_addr = buf_aligned + sizeof(gc_heap_t);
     gc_heap_t *heap = (gc_heap_t *)buf_aligned;
     gc_size_t heap_max_size;
@@ -63,9 +68,15 @@ gc_init_with_pool(char *buf, gc_size_t buf_size)
         return NULL;
     }
 
+#if ENABLE_CHERI_PURECAP
+    base_addr = cheri_align_up(base_addr, GC_ALIGNMENT_SIZE_MASK) + GC_HEAD_PADDING;
+#else
     base_addr =
-        (char *)(((uintptr_t)base_addr + 7) & (uintptr_t)~7) + GC_HEAD_PADDING;
-    heap_max_size = (uint32)(buf_end - base_addr) & (uint32)~7;
+        (char*)(((uintptr_t)base_addr + GC_ALIGNMENT_SIZE_MASK) & (uintptr_t)~GC_ALIGNMENT_SIZE_MASK)
+        + GC_HEAD_PADDING;
+#endif
+
+    heap_max_size = (uint32)(buf_end - base_addr) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
 #if WASM_ENABLE_MEMORY_TRACING != 0
     os_printf("Heap created, total size: %u\n", buf_size);
@@ -86,8 +97,8 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
     char *pool_buf_end = pool_buf + pool_buf_size;
     gc_size_t heap_max_size;
 
-    if ((((uintptr_t)struct_buf) & 7) != 0) {
-        os_printf("[GC_ERROR]heap init struct buf not 8-byte aligned\n");
+    if ((((uintptr_t)struct_buf) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap init struct buf not suitably byte aligned\n");
         return NULL;
     }
 
@@ -97,8 +108,8 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
         return NULL;
     }
 
-    if ((((uintptr_t)pool_buf) & 7) != 0) {
-        os_printf("[GC_ERROR]heap init pool buf not 8-byte aligned\n");
+    if ((((uintptr_t)pool_buf) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap init pool buf not suitably byte aligned\n");
         return NULL;
     }
 
@@ -108,7 +119,7 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
         return NULL;
     }
 
-    heap_max_size = (uint32)(pool_buf_end - base_addr) & (uint32)~7;
+    heap_max_size = (uint32)(pool_buf_end - base_addr) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
 #if WASM_ENABLE_MEMORY_TRACING != 0
     os_printf("Heap created, total size: %u\n",
@@ -167,12 +178,12 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
     hmu_tree_node_t *tree_node;
     gc_size_t heap_max_size, size;
 
-    if ((((uintptr_t)pool_buf_new) & 7) != 0) {
-        os_printf("[GC_ERROR]heap migrate pool buf not 8-byte aligned\n");
+    if ((((uintptr_t)pool_buf_new) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap migrate pool buf not suitably byte aligned\n");
         return GC_ERROR;
     }
 
-    heap_max_size = (uint32)(pool_buf_end - base_addr_new) & (uint32)~7;
+    heap_max_size = (uint32)(pool_buf_end - base_addr_new) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
     if (pool_buf_end < base_addr_new || heap_max_size < heap->current_size) {
         os_printf("[GC_ERROR]heap migrate invlaid pool buf size\n");

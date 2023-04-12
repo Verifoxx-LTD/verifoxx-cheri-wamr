@@ -2,7 +2,6 @@
  * Copyright (C) 2023 Verifoxx Limited
  * Main program for the wamr-app frontend
  */
-
 #include <iostream>
 #include <fstream>
 #include <cstddef>
@@ -21,13 +20,11 @@
 #include "wasm_native.h"
 #include "wasm_runtime_common.h"
 #include "cheri_mem_mgmt.h"
+#include "cheri_mem_mgmt_c_api.h"
+
+#include "cheri_wasm_native_test.h"
 
 using namespace std;
-
-// Reference to the CheriMemMgr instance
-CheriMemMgr* mem_mgr_instance = nullptr;
-
-
 
 class CRunnerException : public std::runtime_error
 {
@@ -38,7 +35,7 @@ public:
 class Runner
 {
     static constexpr size_t EXCEPTION_ARR_SIZE = 250;
-    static constexpr size_t STACK_SIZE = 8092;
+    static constexpr size_t STACK_SIZE = 8092 * 2;
     static constexpr size_t HEAP_SIZE = 8092;
 
     wasm_module_t m_module = nullptr;
@@ -61,9 +58,13 @@ public:
             raise("wasm_init() failed");
         }
 
-
+        if (!do_wasm_register_natives())
+        {
+            raise("wasm_runtime_register_natives() failed");
+        }
 
         /* parse the WASM file from buffer and create a WASM module */
+        cout << "WAMR-app: Loading module..." << endl;
         if (!(m_module = wasm_runtime_load((uint8_t*)module_buff.data(), module_buff.size(), ex_buff.begin(), ex_buff.size())))
         {
             raise("wasm_runtime_load failed!");
@@ -86,7 +87,12 @@ public:
 
         if (fn_name != "main")
         {
+            cout << "WAMR-app: Will execute function \"" << fn_name << "\"" << endl;
             m_fn = wasm_runtime_lookup_function(m_module_inst, fn_name.c_str(), NULL);
+        }
+        else
+        {
+            cout << "WAMR-app: Will execute function: main()" << endl;
         }
     }
 
@@ -109,8 +115,7 @@ public:
         }
 
         wasm_runtime_destroy();
-        delete mem_mgr_instance;
-        mem_mgr_instance = nullptr;
+        delete_cheri_mem_mgr(); // Destroy the C API version
     }
 
     bool Run(bool expect_return_val = false, int64_t argc = 0, char *argv[] = nullptr)
@@ -118,10 +123,10 @@ public:
         bool result;
         uint32_t retval = 0;
 
+        cout << "WAMR-app: Executing WASM Module..." << endl;
         if (m_fn)
         {
-            cout << "Running Function" << endl;
-
+            
             // Convert arguments to a list of integers
             vector<uint32_t> params;
 
@@ -138,21 +143,20 @@ public:
         }
         else
         {
-            cout << "Running main()" << endl;
             result = wasm_application_execute_main(m_module_inst, argc, argv);
             if (result)
             {
                 retval = wasm_runtime_get_wasi_exit_code(m_module_inst);
             }
         }
-            
+
         if (!result)
         {
-            cerr << "Failed to run!: Exception -> " << wasm_runtime_get_exception(m_module_inst) << endl;
+            cerr << "WAMR-app: Module execution failed!: Exception -> " << wasm_runtime_get_exception(m_module_inst) << endl;
         }
         else
         {
-            cout << "WASM execution: result ";
+            cout << "WAMR-app: Run completes ok! Function return value=";
                 
             if (expect_return_val)
             {
@@ -160,7 +164,7 @@ public:
             }
             else
             {
-                cout << "not applicable";
+                cout << "<none>";
             }
             cout << endl;
         }
@@ -173,46 +177,37 @@ protected:
     {
         try
         {
-            mem_mgr_instance = new CheriMemMgr{ STACK_SIZE, HEAP_SIZE};
+            auto mem_mgr_instance = create_cheri_mem_mgr(STACK_SIZE, HEAP_SIZE); // Call through the C version to set up the mem_mgr for C
             mem_mgr_instance->setup_wasm_stack();
             mem_mgr_instance->wasm_memory_init();
+            return true;
         }
         catch (exception&)
         {
-            cout << "Cheri Mem Manager failed" << endl;
-            if (mem_mgr_instance)
-            {
-                mem_mgr_instance->cleanup_wasm_stack();
-            }
+            cerr << "Cheri Mem Manager failed" << endl;
             return false;
         }
 
+    }
 
-        if (wasm_memory_init_with_allocator((void*)malloc, nullptr, (void*)free)
-            && wasm_runtime_set_default_running_mode(Mode_Interp)
-            && wasm_native_init()
-            && runtime_signal_init()
-            )
-        {
-            return true;
-        }
-
-        wasm_runtime_memory_destroy();
-        return false;
-        
+    bool do_wasm_register_natives()
+    {
+        return wasm_runtime_register_natives("env", native_symbols_table(), num_native_symbols());
     }
 };
 
 int main(int argc, char* argv[])
 {
-    cout << "Launching default WAMR-APP front end" << endl;
+    cout << endl << "**** WAMR-APP: C++ front end to run WAMR ****" << endl;
+    cout << "WAMR-app is starting up..." << endl;
 
-    if (argc < 3)
+    if (argc < 2)
     {
-        cerr << "Usage: " << argv[0] << "<wasm-file> <fn|main> [param1 param2 param3...]" << endl;
+        cerr << "Usage: " << argv[0] << " <wasm-file> [<fn_to_run_default_main>] [param1 param2 param3...]" << endl;
         return -1;
     }
 
+    cout << "WAMR-app: Loading " << argv[1] << "..." << endl;
     ifstream fin(argv[1], ios::in | ios::binary | ios::ate);
     if (!fin.good())
     {
@@ -221,7 +216,7 @@ int main(int argc, char* argv[])
     }
 
     // Enable all logging in the VM lib
-    bh_log_set_verbose_level(BH_LOG_LEVEL_VERBOSE);
+    bh_log_set_verbose_level(BH_LOG_LEVEL_DEBUG);
 
     fin.seekg(0, std::ios::end);
     auto sz = fin.tellg();
@@ -237,13 +232,16 @@ int main(int argc, char* argv[])
     }
     fin.close();
 
-    string fn_name{ argv[2] };
+    string fn_name{ argc==2 ? "main" : argv[2]};
 
     try
     {
+        cout << "WAMR-app: Module loaded, WAMR Initialising..." << endl;
         Runner runner{ buff, fn_name };
 
-        int exitCode = runner.Run(true, argc - 2, (argc > 2) ? &argv[3] : nullptr) ? 0 : -1;
+        int exitCode = runner.Run(true, argc - 3, (argc > 3) ? &argv[3] : nullptr) ? 0 : -1;
+        cout << "WAMR-app: Exiting, returning: " << exitCode << endl;
+        cout << "*** End ***" << endl << endl;
         return exitCode;
     }
     catch (CRunnerException &ex)

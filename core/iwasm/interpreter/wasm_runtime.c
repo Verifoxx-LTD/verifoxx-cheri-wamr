@@ -26,6 +26,11 @@
 #include "../aot/aot_runtime.h"
 #endif
 
+#ifdef __CHERI__
+#include "cheri_mem_mgmt_c_api.h"
+#include <cheriintrin.h>
+#endif
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -269,6 +274,18 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
             if (heap_size > 0)
                 heap_size -= 1 * BH_KB;
         }
+
+#ifdef __CHERI__
+        // @todo: sort out better way of ensuring heap start & size aligned
+        if (!cheri_is_aligned(heap_offset, __BIGGEST_ALIGNMENT__)
+            || !cheri_is_aligned(heap_size, __BIGGEST_ALIGNMENT__))
+        {
+            set_error_buf(error_buf, error_buf_size,
+                "Heap offset and size should be aligned on CHERI");
+            return NULL;
+        }
+#endif
+
         init_page_count += inc_page_count;
         max_page_count += inc_page_count;
         if (init_page_count > DEFAULT_MAX_PAGES) {
@@ -301,11 +318,23 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
 
     bh_assert(memory != NULL);
 #ifndef OS_ENABLE_HW_BOUND_CHECK
+
+#ifdef __CHERI__
+    // Use the CHERI linear memory allocator
+    if (memory_data_size > 0
+        && !(memory->memory_data = cheri_wasm_linear_memory_alloc(memory_data_size)))
+    {
+        set_error_buf(error_buf, error_buf_size, "CHERI allocate linear memory failed");
+        goto fail1;
+    }
+#else
     if (memory_data_size > 0
         && !(memory->memory_data =
                  runtime_malloc(memory_data_size, error_buf, error_buf_size))) {
         goto fail1;
     }
+#endif /* __CHERI__ */
+
 #else
     memory_data_size = (memory_data_size + page_size - 1) & ~(page_size - 1);
 
@@ -1571,8 +1600,15 @@ wasm_instantiate(WASMModule *module, bool is_sub_inst, uint32 stack_size,
     total_size += table_size;
 
     /* The offset of WASMModuleInstanceExtra, make it 8-byte aligned */
+#ifdef __CHERI__
+    // On CHERI, add space for alignment after memory_instance, globals and table and align up the final
+    // result ahead of WASMModuleInstanceExtra
+    total_size += __BIGGEST_ALIGNMENT__ * 3;
+    total_size = cheri_align_up(total_size, __BIGGEST_ALIGNMENT__);    // 16 bytes aligned on CHERI
+#else
     total_size = (total_size + 7LL) & ~7LL;
-    extra_info_offset = (uint32)total_size;
+#endif
+    extra_info_offset = (uint32)total_size; // Aligned on CHERI
     total_size += sizeof(WASMModuleInstanceExtra);
 
     /* Allocate the memory for module instance with memory instances,
@@ -1625,10 +1661,21 @@ wasm_instantiate(WASMModule *module, bool is_sub_inst, uint32 stack_size,
     module_inst->e->globals = globals;
     module_inst->global_data = (uint8 *)module_inst + module_inst_struct_size
                                + module_inst_mem_inst_size;
+#ifdef __CHERI__
+    // Align up the start of global data, we did make space for it previously
+    module_inst->global_data = cheri_align_up(module_inst->global_data, __BIGGEST_ALIGNMENT__);
+#endif
+
     module_inst->global_data_size = module->global_data_size;
+
+#ifdef __CHERI__
+    // Align up the place for first table in case global_data_size is not aligned
+    first_table = (WASMTableInstance*)(module_inst->global_data
+        + (uintptr_t)cheri_align_up(module->global_data_size, __BIGGEST_ALIGNMENT__));
+#else
     first_table = (WASMTableInstance *)(module_inst->global_data
                                         + module->global_data_size);
-
+#endif
     module_inst->memory_count =
         module->import_memory_count + module->memory_count;
     module_inst->table_count = module->import_table_count + module->table_count;
