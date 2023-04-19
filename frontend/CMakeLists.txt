@@ -126,9 +126,8 @@ message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 
 # Configure WAMR features
 if (NOT DEFINED WAMR_BUILD_MEMORY_TRACING)
-set (WAMR_BUILD_MEMORY_TRACING 1)  # Enable by default
+set (WAMR_BUILD_MEMORY_TRACING 0)  # Disable by default
 endif ()
-
 
 if (NOT DEFINED WAMR_BUILD_INTERP)
   # Enable Interpreter by default
@@ -194,6 +193,12 @@ if (NOT DEFINED WAMR_BUILD_DEBUG_INTERP)
   # Disable Debug feature by default
   set (WAMR_BUILD_DEBUG_INTERP 0)
 endif ()
+
+if (NOT DEFINED WAMR_BUILD_DEBUG_PREPROCESSOR)
+  # Disable Debug Preprocessor by default
+  set (WAMR_BUILD_DEBUG_PREPROCESSOR 0)
+endif ()
+
 
 if (WAMR_BUILD_DEBUG_INTERP EQUAL 1)
   set (WAMR_BUILD_FAST_INTERP 0)

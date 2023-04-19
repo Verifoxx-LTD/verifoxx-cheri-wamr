@@ -21,6 +21,10 @@
 #endif
 #endif
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,6 +33,17 @@ bool runtime_signal_init();
 
 /* Internal use for setting default running mode */
 #define Mode_Default 0
+
+/* Support for CHERI pure-cap instruction store of label pointers */
+#if ENABLE_CHERI_PURECAP
+#define CHERI_POINTER_ALIGN  __BIGGEST_ALIGNMENT__
+
+// Allow space for pointer + maximum alignment, and ensure
+// this is itself aligned to even byte boundary
+#define CHERI_POINTER_STORAGE_SIZE ((sizeof(void *) + \
+        CHERI_POINTER_ALIGN + 1) & ~0x1)
+
+#endif /* ENABLE_CHERI_PURECAP && WASM_ENABLE_FAST_INTERP */
 
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
 
@@ -292,7 +307,13 @@ LOAD_I16(void *addr)
 #define LOAD_U32(addr) ((uint32)LOAD_I32(addr))
 #define LOAD_U16(addr) ((uint16)LOAD_I16(addr))
 
-#if UINTPTR_MAX == UINT32_MAX
+#if ENABLE_CHERI_PURECAP
+// STORE_PTR: On CHERI, store directly after first guaranteeing alignment
+static inline void STORE_PTR(void* addr, void* ptr)
+{
+    *(void**)cheri_align_up(addr, CHERI_POINTER_ALIGN) = ptr;
+}
+#elif UINTPTR_MAX == UINT32_MAX
 #define STORE_PTR(addr, ptr) STORE_U32(addr, (uintptr_t)ptr)
 #elif UINTPTR_MAX == UINT64_MAX
 #define STORE_PTR(addr, ptr) STORE_I64(addr, (uintptr_t)ptr)

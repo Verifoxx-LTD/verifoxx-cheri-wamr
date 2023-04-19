@@ -1,4 +1,4 @@
-;; Build with wat2wasm wasm_memory_hello.wat -i wasm_memory_hello.wasm
+;; Build with wat2wasm wasm_memory_hello.wat -o wasm_memory_hello.wasm
 
 
 (module
