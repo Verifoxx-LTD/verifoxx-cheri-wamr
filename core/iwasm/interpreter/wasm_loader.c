@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "wasm_loader.h"
 #include "bh_common.h"
 #include "bh_log.h"
@@ -21,6 +25,7 @@
 #if WASM_ENABLE_JIT != 0
 #include "../compilation/aot_llvm.h"
 #endif
+
 
 /* Read a value of given type from the address pointed to by the given
    pointer and increase the pointer to the position just after the
@@ -5040,7 +5045,7 @@ fail:
 typedef struct BranchBlockPatch {
     struct BranchBlockPatch *next;
     uint8 patch_type;
-    uint8 *code_compiled;
+    uint8* code_compiled __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 } BranchBlockPatch;
 #endif
 
@@ -5787,6 +5792,21 @@ wasm_loader_emit_uint8(WASMLoaderContext *ctx, uint8 value)
     }
 }
 
+#if ENABLE_CHERI_PURECAP
+// Need to align before store pointer on CHERI pure-cap
+static void
+wasm_loader_emit_ptr(WASMLoaderContext* ctx, void* value)
+{
+    // As we don't know the actual size, due to alignment, allow space for 2 x capability pointer
+    if (ctx->p_code_compiled) {
+        STORE_PTR(ctx->p_code_compiled, value);
+        ctx->p_code_compiled += (size_t)CHERI_POINTER_STORAGE_SIZE;
+    }
+    else {
+        increase_compiled_code_space(ctx, (size_t)CHERI_POINTER_STORAGE_SIZE);
+    }
+}
+#else
 static void
 wasm_loader_emit_ptr(WASMLoaderContext *ctx, void *value)
 {
@@ -5804,6 +5824,8 @@ wasm_loader_emit_ptr(WASMLoaderContext *ctx, void *value)
         increase_compiled_code_space(ctx, sizeof(void *));
     }
 }
+#endif
+
 
 static void
 wasm_loader_emit_backspace(WASMLoaderContext *ctx, uint32 size)
@@ -5954,7 +5976,17 @@ apply_label_patch(WASMLoaderContext *ctx, uint8 depth, uint8 patch_type)
     while (node) {
         node_next = node->next;
         if (node->patch_type == patch_type) {
+
+            // node->code_compiled is the address that needs the patch
+            // ctx->p_code_compiled is value to patch
+
+#if ENABLE_CHERI_PURECAP
+            // For CHERI Purecap, the instruction address to patch was provided
+            // with CHERI_POINTER_STORAGE_SIZE free bytes, STORE_PTR will first align
             STORE_PTR(node->code_compiled, ctx->p_code_compiled);
+#else
+            STORE_PTR(node->code_compiled, ctx->p_code_compiled);
+#endif
             if (node_prev == NULL) {
                 frame_csp->patch_list = node_next;
             }

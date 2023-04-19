@@ -13,6 +13,10 @@
 #include "../common/wasm_shared_memory.h"
 #endif
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 typedef int32 CellType_I32;
 typedef int64 CellType_I64;
 typedef float32 CellType_F32;
@@ -256,7 +260,15 @@ LOAD_U32_WITH_2U16S(void *addr)
     u.u16[1] = ((uint16 *)addr)[1];
     return u.val;
 }
-#if UINTPTR_MAX == UINT32_MAX
+#if ENABLE_CHERI_PURECAP
+static inline void*
+LOAD_PTR(void* addr)
+{
+    // When storing pointer on CHERI we aligned up, so do the same on load
+    return *(void **)cheri_align_up(addr, CHERI_POINTER_ALIGN);
+}
+
+#elif UINTPTR_MAX == UINT32_MAX
 #define LOAD_PTR(addr) ((void *)LOAD_U32_WITH_2U16S(addr))
 #elif UINTPTR_MAX == UINT64_MAX
 static inline void *
@@ -794,6 +806,21 @@ copy_stack_values(WASMModuleInstance *module, uint32 *frame_lp, uint32 arity,
         frame_ip = (uint8 *)LOAD_PTR(frame_ip);                             \
     } while (0)
 
+#if ENABLE_CHERI_PURECAP
+#define SKIP_BR_INFO()                                                        \
+    do {                                                                      \
+        uint32 arity;                                                         \
+        /* read and skip arity */                                             \
+        arity = read_uint32(frame_ip);                                        \
+        if (arity) {                                                          \
+            /* skip total cell num */                                         \
+            frame_ip += sizeof(uint32);                                       \
+            /* skip cells, src offsets and dst offsets */                     \
+            frame_ip += (CELL_SIZE + sizeof(int16) + sizeof(uint16)) * arity; \
+        }                                                                     \
+        frame_ip += CHERI_POINTER_STORAGE_SIZE;                              \
+    } while (0)
+#else
 #define SKIP_BR_INFO()                                                        \
     do {                                                                      \
         uint32 arity;                                                         \
@@ -808,7 +835,7 @@ copy_stack_values(WASMModuleInstance *module, uint32 *frame_lp, uint32 arity,
         /* skip target address */                                             \
         frame_ip += sizeof(uint8 *);                                          \
     } while (0)
-
+#endif
 static inline int32
 sign_ext_8_32(int8 val)
 {
@@ -1114,7 +1141,7 @@ wasm_interp_dump_op_count()
 #else
 #define FETCH_OPCODE_AND_DISPATCH()                                 \
     do {                                                            \
-        const void *p_label_addr = label_base + *(int16 *)frame_ip; \
+        const void *p_label_addr = label_base + (size_t)(*(int16 *)frame_ip); \
         frame_ip += sizeof(int16);                                  \
         goto *p_label_addr;                                         \
     } while (0)
@@ -1217,15 +1244,23 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                 if (cond == 0) {
                     uint8 *else_addr = (uint8 *)LOAD_PTR(frame_ip);
                     if (else_addr == NULL) {
-                        frame_ip =
-                            (uint8 *)LOAD_PTR(frame_ip + sizeof(uint8 *));
+#if ENABLE_CHERI_PURECAP
+                        // Next instruction is skipped past the else address
+                        frame_ip = (uint8*)LOAD_PTR(frame_ip + CHERI_POINTER_STORAGE_SIZE);
+#else
+                        frame_ip = (uint8*)LOAD_PTR(frame_ip + sizeof(uint8*));
+#endif
                     }
                     else {
                         frame_ip = else_addr;
                     }
                 }
                 else {
-                    frame_ip += sizeof(uint8 *) * 2;
+#if ENABLE_CHERI_PURECAP
+                    frame_ip += (CHERI_POINTER_STORAGE_SIZE << 1); // Skip space for two addresses
+#else
+                    frame_ip += sizeof(uint8*) * 2;
+#endif
                 }
                 HANDLE_OP_END();
             }
@@ -1287,7 +1322,13 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
                         (CELL_SIZE + sizeof(int16) + sizeof(uint16)) * arity;
                 }
                 /* target address */
-                br_item_size += sizeof(uint8 *);
+#if ENABLE_CHERI_PURECAP
+                /* On CHERI, address pointers are stored in a specific sized field,
+                    skip past this to then read br_item_size */
+                br_item_size += CHERI_POINTER_STORAGE_SIZE;
+#else
+                br_item_size += sizeof(uint8*);
+#endif
 
                 frame_ip += br_item_size * didx;
                 goto recover_br_info;
@@ -3713,6 +3754,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 #endif
         {
             outs_area->lp = outs_area->operand + cur_func->const_cell_num;
+
         }
 
         if ((uint8 *)(outs_area->lp + cur_func->param_cell_num)
@@ -3926,11 +3968,13 @@ wasm_interp_call_wasm(WASMModuleInstance *module_inst, WASMExecEnv *exec_env,
     frame->lp = frame->operand + 0;
     frame->ret_offset = 0;
 
-    if ((uint8 *)(outs_area->operand + function->const_cell_num + argc)
+
 #ifdef __CHERI__
-        > exec_env->wasm_stack_p->top_boundary) {
+    if ((uintptr_t)(outs_area->operand + function->const_cell_num + argc) >
+        (uintptr_t)exec_env->wasm_stack_p->top_boundary) {
 #else
-        > exec_env->wasm_stack.s.top_boundary) {
+    if ((uint8*)(outs_area->operand + function->const_cell_num + argc) >
+        exec_env->wasm_stack.s.top_boundary) {
 #endif
         wasm_set_exception((WASMModuleInstance *)exec_env->module_inst,
                            "wasm operand stack overflow");

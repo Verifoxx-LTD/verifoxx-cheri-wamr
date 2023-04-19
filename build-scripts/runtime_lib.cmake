@@ -136,6 +136,11 @@ if (WAMR_BUILD_DEBUG_INTERP EQUAL 1)
     endif ()
 endif ()
 
+if (WAMR_BUILD_DEBUG_PREPROCESSOR)
+    # Enable the flag to build debug preprocessor
+    add_definitions (-DWASM_DEBUG_PREPROCESSOR=1)
+endif ()
+
 if (WAMR_BUILD_THREAD_MGR EQUAL 1)
     include (${IWASM_DIR}/libraries/thread-mgr/thread_mgr.cmake)
 endif ()

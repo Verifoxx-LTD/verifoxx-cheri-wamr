@@ -26,6 +26,8 @@
 
 using namespace std;
 
+static constexpr uint32 LOG_LEVEL = BH_LOG_LEVEL_WARNING;
+
 class CRunnerException : public std::runtime_error
 {
 public:
@@ -201,6 +203,12 @@ int main(int argc, char* argv[])
     cout << endl << "**** WAMR-APP: C++ front end to run WAMR ****" << endl;
     cout << "WAMR-app is starting up..." << endl;
 
+#if WASM_ENABLE_FAST_INTERP
+    cout << "Fast interpreter ENABLED" << endl;
+#else
+    cout << "Fast interpreter DISABLED" << endl;
+#endif
+
     if (argc < 2)
     {
         cerr << "Usage: " << argv[0] << " <wasm-file> [<fn_to_run_default_main>] [param1 param2 param3...]" << endl;
@@ -216,7 +224,7 @@ int main(int argc, char* argv[])
     }
 
     // Enable all logging in the VM lib
-    bh_log_set_verbose_level(BH_LOG_LEVEL_DEBUG);
+    bh_log_set_verbose_level(LOG_LEVEL);
 
     fin.seekg(0, std::ios::end);
     auto sz = fin.tellg();
