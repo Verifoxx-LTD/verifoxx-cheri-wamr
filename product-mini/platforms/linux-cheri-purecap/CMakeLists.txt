@@ -83,7 +83,7 @@ endif ()
 # Set Build flags for the targetted architecture
 if (CHERI_PURECAP)
     message(STATUS "CHERI pure-cap mode enabled")
-    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")# -fpack-struct=16 -mstrict-align ")
+    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")
 else ()
     message(STATUS "CHERI hybrid capability mode enabled")
     set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
@@ -114,15 +114,17 @@ set (CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
 set (CMAKE_C_STANDARD 99)
 
-enable_language(C CXX)
+enable_language(C CXX ASM)
 
 if (NOT DEFINED CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif ()
 message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 
-######## Reminder of this file contains same content as ../linux/CMakeLists.txt
-### NOTE: Configure minimal set of features as needed
+##### Configure WAMR features #####
+if (NOT DEFINED WAMR_BUILD_MEMORY_TRACING)
+set (WAMR_BUILD_MEMORY_TRACING 0)  # Disable by default
+endif ()
 
 if (NOT DEFINED WAMR_BUILD_INTERP)
   # Enable Interpreter by default
@@ -189,6 +191,11 @@ if (NOT DEFINED WAMR_BUILD_DEBUG_INTERP)
   set (WAMR_BUILD_DEBUG_INTERP 0)
 endif ()
 
+if (NOT DEFINED WAMR_BUILD_DEBUG_PREPROCESSOR)
+  # Disable Debug Preprocessor by default
+  set (WAMR_BUILD_DEBUG_PREPROCESSOR 0)
+endif ()
+
 if (WAMR_BUILD_DEBUG_INTERP EQUAL 1)
   set (WAMR_BUILD_FAST_INTERP 0)
   set (WAMR_BUILD_MINI_LOADER 0)
@@ -220,22 +227,23 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wformat -Wformat-securit
 
 include (${SHARED_DIR}/utils/uncommon/shared_uncommon.cmake)
 
-add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE} ${VERIFOXX_UTILS_INCS})
+add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE})
 
 check_pie_supported()
 set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON LINKER_LANGUAGE CXX)
-set_property(TARGET iwasm PROPERTY CXX_STANDARD 11)
+set_property(TARGET iwasm PROPERTY CXX_STANDARD 14)
 
 target_link_options(iwasm PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker iwasm.map")
 
-install (TARGETS iwasm DESTINATION bin)
 
-target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} ${VERIFOXX_UTILS_LIB} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FINAL})
+target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FINAL})
 
 add_library (libiwasm SHARED ${WAMR_RUNTIME_LIB_SOURCE})
-
-install (TARGETS libiwasm DESTINATION lib)
 
 set_target_properties (libiwasm PROPERTIES OUTPUT_NAME iwasm)
 
 target_link_libraries (libiwasm ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread)
+
+install (TARGETS iwasm DESTINATION bin)
+install (TARGETS libiwasm DESTINATION lib)
+install (FILES ${CMAKE_CURRENT_BINARY_DIR}/iwasm.map DESTINATION bin)

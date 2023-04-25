@@ -275,17 +275,6 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
                 heap_size -= 1 * BH_KB;
         }
 
-#ifdef __CHERI__
-        // @todo: sort out better way of ensuring heap start & size aligned
-        if (!cheri_is_aligned(heap_offset, __BIGGEST_ALIGNMENT__)
-            || !cheri_is_aligned(heap_size, __BIGGEST_ALIGNMENT__))
-        {
-            set_error_buf(error_buf, error_buf_size,
-                "Heap offset and size should be aligned on CHERI");
-            return NULL;
-        }
-#endif
-
         init_page_count += inc_page_count;
         max_page_count += inc_page_count;
         if (init_page_count > DEFAULT_MAX_PAGES) {
@@ -301,6 +290,17 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
         if (max_page_count > DEFAULT_MAX_PAGES)
             max_page_count = DEFAULT_MAX_PAGES;
     }
+
+#ifdef __CHERI__
+    // @todo: sort out better way of ensuring heap start & size aligned
+    if (!cheri_wasm_set_check_heap_metrics(heap_size, heap_offset))
+    {
+        set_error_buf(error_buf, error_buf_size,
+            "Heap offset and size should be aligned on CHERI");
+        return NULL;
+    }
+    LOG_VERBOSE("CHERI heap alignments check OK");
+#endif
 
     LOG_VERBOSE("Memory instantiate:");
     LOG_VERBOSE("  page bytes: %u, init pages: %u, max pages: %u",

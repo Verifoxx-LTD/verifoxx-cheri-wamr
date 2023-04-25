@@ -27,7 +27,7 @@
         "WAMR_BUILD_MEMORY_TRACING": "0",
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
-        "WAMR_APP": "1"
+        "WAMR_APP": "0"
       },
       "condition": {
         "type": "equals",

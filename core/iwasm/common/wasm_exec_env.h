@@ -168,7 +168,7 @@ typedef struct WASMExecEnv {
 #ifdef __CHERI__
     BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
-    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE];
 #endif
 #endif
 

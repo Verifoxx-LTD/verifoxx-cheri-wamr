@@ -232,9 +232,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_sources(${PROJECT_NAME} PRIVATE
     "main.cpp"
-    "cheri_mem_mgmt_c_api.h"
-    "cheri_mem_mgmt.h"
-    "cheri_mem_mgmt.cpp"
     "cheri_wasm_native_test.h"
     "cheri_wasm_native_test.cpp"
     "${WAMR_RUNTIME_LIB_SOURCE}"

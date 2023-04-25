@@ -3,17 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+/* Linux CHERI platform init */
+
 #include "platform_api_vmcore.h"
+#include "cheri_mem_mgmt_c_api.h"
+#include "bh_log.h"
 
 int
 bh_platform_init()
 {
+    if (NULL == create_cheri_mem_mgr())
+    {
+        LOG_ERROR("Failed to create CHERI Memory Manager");
+        return -1;
+    }
     return 0;
 }
 
 void
 bh_platform_destroy()
-{}
+{
+    delete_cheri_mem_mgr();
+}
 
 int
 os_printf(const char *format, ...)
