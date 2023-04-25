@@ -34,6 +34,13 @@ public:
     
 
 private:
+
+#ifdef WASM_ENABLE_MEMORY_TRACING
+    static constexpr bool TRACE_MEM = true;
+#else
+    static constexpr bool TRACE_MEM = false;
+#endif
+
     static constexpr size_t CHERI_ALIGNMENT = alignof(void* __capability);
     static constexpr size_t WASM_STACK_PERMS =
         CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | ARM_CAP_PERMISSION_MUTABLE_LOAD |
@@ -69,20 +76,7 @@ public:
     // Allocate linear memory
     void* __capability alloc_linear_memory(size_t sz);
 
-    void cleanup_wasm_stack()
-    {
-        if (m_stack_struct)
-        {
-            delete m_stack_struct;
-            m_stack_struct = nullptr;
-        }
-
-        if (m_stack)
-        {
-            delete[] m_stack;
-            m_stack = nullptr;
-        }
-    }
+    void cleanup_wasm_stack();
 
     // Set stack size / get size used
     uint32_t set_stack_size(uint32_t size)
