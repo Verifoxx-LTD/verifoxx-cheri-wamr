@@ -236,6 +236,7 @@ load_and_register_native_libs(const char** native_lib_list,
         /* open the native library */
         if (!(handle = dlopen(native_lib_list[i], RTLD_NOW | RTLD_GLOBAL))
             && !(handle = dlopen(native_lib_list[i], RTLD_LAZY))) {
+            LOG_FATAL("Failed: Error %s", dlerror());
             LOG_WARNING("warning: failed to load native library %s",
                 native_lib_list[i]);
             continue;
