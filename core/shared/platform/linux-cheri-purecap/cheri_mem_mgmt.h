@@ -35,7 +35,7 @@ public:
 
 private:
 
-#ifdef WASM_ENABLE_MEMORY_TRACING
+#if WASM_ENABLE_MEMORY_TRACING
     static constexpr bool TRACE_MEM = true;
 #else
     static constexpr bool TRACE_MEM = false;

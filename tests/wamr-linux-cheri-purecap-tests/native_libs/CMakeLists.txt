@@ -21,13 +21,6 @@ set (CMAKE_SYSTEM_VERSION 1) # this one not so much
 message(STATUS "*** Linux CHERI Pure-cap platform set ***")
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-if (NOT DEFINED MORELLO_PURECAP_LIBS_FOLDER)
-set(MORELLO_PURECAP_LIBS_FOLDER "/purecap-lib")
-endif ()
-
-message(STATUS "Purecap versions of needed dynamic libraries will be searched in ${MORELLO_PURECAP_LIBS_FOLDER}")
-
-
 # CHERI pure-cap enabled?
 if (NOT DEFINED CHERI_PURECAP)
     set (CHERI_PURECAP 1)
@@ -88,10 +81,18 @@ endif ()
 # Set Build flags for the targetted architecture
 if (CHERI_PURECAP)
     message(STATUS "CHERI pure-cap mode enabled")
-    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")
+
+    if (NOT DEFINED MORELLO_PURECAP_LIBS_FOLDER)
+        set(MORELLO_PURECAP_LIBS_FOLDER "/purecap-lib")
+    endif ()
+
+    message(STATUS "** Purecap versions of needed dynamic libraries will be searched in ${MORELLO_PURECAP_LIBS_FOLDER} **")
+
+    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}")
 else ()
     message(STATUS "CHERI hybrid capability mode enabled")
     set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
+    message (STATUS "** Hybrid versions of needed dynamic libraries will be searched in standard Library path, you need to copy libiwasm.so to e.g /lib and then run ldconfig to update cache **")
 endif ()
 
 # Final common compiler flags adds options to save build files and set the __FILE__ mapping folder
@@ -119,7 +120,7 @@ endif ()
 message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-unused")# -Wl,-Bstatic,-lstdc++,-lm,-lc,-Bdynamic")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-unused")
 
 set (WAMR_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 set (WAMR_INCLUDE_DIR "${WAMR_ROOT_DIR}/core/iwasm/include")
@@ -138,6 +139,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} $
 
 target_sources(${PROJECT_NAME} PRIVATE "cheri_wasm_native_test.h" "cheri_wasm_native_test.cpp")
 
-target_link_libraries(${PROJECT_NAME} "-static-libstdc++ -static-libgcc -L${WAMR_LIBIWASM_DIR} -Wl,-Bdynamic,-liwasm -Wl,-Bdynamic,-lc -Wl,-Bstatic,-lm -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}")
+# Note on library linking:
+# - libiwasm is only built as shared object
+# - libm will still be needed dynamically (must be a dependency that cannot seem to resolve)
+target_link_libraries(${PROJECT_NAME} -static-libstdc++ -static-libgcc -L${WAMR_LIBIWASM_DIR} -Wl,-Bstatic,-lm -Wl,-Bdynamic,-liwasm -Wl,-Bdynamic,-lc)
 
 install (TARGETS ${PROJECT_NAME} DESTINATION lib)

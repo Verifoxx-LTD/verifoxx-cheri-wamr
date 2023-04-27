@@ -245,7 +245,7 @@ set_target_properties (libiwasm PROPERTIES OUTPUT_NAME iwasm)
 # NOTE: Currently CHERI Morello apps should be built statically as native libs are hybrid (not purecap)
 # We cannot do that for a shared library, but build as much as possible statically and provide libc in a specific folder so there
 # is no interaction with the installed one.
-target_link_libraries (libiwasm ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} "-static-libstdc++ -static-libgcc" -Wl,-Bstatic,-lm -Wl,-Bstatic,-ldl -Wl,-Bstatic,-lpthread -Wl,-Bdynamic,-lc)
+target_link_libraries (libiwasm ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -static-libstdc++ -static-libgcc -Wl,-Bstatic,-lm -Wl,-Bstatic,-ldl -Wl,-Bstatic,-lpthread -Wl,-Bdynamic,-lc)
 
 install (TARGETS iwasm DESTINATION bin)
 install (TARGETS libiwasm DESTINATION lib)

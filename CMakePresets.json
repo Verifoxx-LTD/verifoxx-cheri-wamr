@@ -27,7 +27,8 @@
         "WAMR_BUILD_MEMORY_TRACING": "0",
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
-        "WAMR_APP": "0"
+        "WAMR_APP": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1"
       },
       "condition": {
         "type": "equals",
@@ -65,7 +66,8 @@
       "displayName": "Debug armC64+ PureCap",
       "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
-        "CHERI_PURECAP": "1"
+        "CHERI_PURECAP": "1",
+        "MORELLO_PURECAP_LIBS_FOLDER":  "/purecap-lib"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {

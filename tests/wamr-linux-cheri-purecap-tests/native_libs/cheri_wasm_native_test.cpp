@@ -47,7 +47,7 @@ extern "C" uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, 
     {
         std::cout << "    native FAILED call back to wasm, exception: " << wasm_runtime_get_exception(module_inst) << std::endl;
     }
-    
+
     std::cout << "    native do_sum()--: return=" << result << std::endl;
 
     return result;

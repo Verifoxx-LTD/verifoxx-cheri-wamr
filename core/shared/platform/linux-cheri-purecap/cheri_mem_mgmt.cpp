@@ -172,13 +172,19 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
      try
      {
          // Allocate the actual stack.  Note - to avoid the top boundary being out of bounds, allocate extra space
-         m_stack = static_cast<uint8 * __capability>(new uint8[m_stack_size.Get() + CHERI_ALIGNMENT]);
+         // Also allocate stack struct
+#if ENABLE_CHERI_PURECAP
+         m_stack = new uint8[m_stack_size.Get() + CHERI_ALIGNMENT];
+         m_stack_struct = new WASMCheriStack_t{};
+
+#else
+         m_stack = (uint8_t * __capability)cheri_address_set(cheri_ddc_get(), (uintptr_t)new uint8[m_stack_size.Get() + CHERI_ALIGNMENT]);
+         m_stack_struct = (WASMCheriStack_t * __capability)cheri_address_set(cheri_ddc_get(), (uintptr_t)new WASMCheriStack_t{});
+#endif
 
          // Zero the stack before we use it
          std::memset(m_stack, 0, m_stack_size.Get() + CHERI_ALIGNMENT);
 
-         // And our stack structure
-         m_stack_struct = static_cast<WASMCheriStack_t * __capability>(new WASMCheriStack_t{});
          
          m_stack = cheri_perms_and(m_stack, WASM_STACK_PERMS);
 

@@ -8,6 +8,7 @@
 #include "cheri_mem_mgmt.h"
 #include "cheri_mem_mgmt_c_api.h"
 
+#if ENABLE_CHERI_PURECAP
 extern "C" void*
 os_malloc(unsigned size)
 {
@@ -25,6 +26,29 @@ os_free(void *ptr)
 {
     return create_cheri_mem_mgr()->cheri_free(ptr);
 }
+#else
+#include <cheriintrin.h>
+
+extern "C" void*
+os_malloc(unsigned size)
+{
+    auto alloc_ptr = create_cheri_mem_mgr()->cheri_malloc(size);
+    return (void*)cheri_address_get(alloc_ptr);
+}
+
+void*
+os_realloc(void* ptr, unsigned size)
+{
+    auto alloc_ptr = create_cheri_mem_mgr()->cheri_realloc(cheri_address_set(cheri_ddc_get(), (uintptr_t)ptr), size);
+    return (void*)cheri_address_get(alloc_ptr);
+}
+
+void
+os_free(void* ptr)
+{
+    create_cheri_mem_mgr()->cheri_free(cheri_address_set(cheri_ddc_get(), (uintptr_t)ptr));
+}
+#endif /* ENABLE_CHERI_PURECAP */
 
 int
 os_dumps_proc_mem_info(char *out, unsigned int size)

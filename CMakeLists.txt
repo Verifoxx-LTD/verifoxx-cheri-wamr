@@ -13,13 +13,15 @@ if (NOT DEFINED WAMR_BUILD_PLATFORM)
 endif ()
 
 if ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
-add_subdirectory(product-mini/platforms/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/${WAMR_BUILD_PLATFORM})
+    add_subdirectory(product-mini/platforms/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/${WAMR_BUILD_PLATFORM})
 
-# Also build native .so for test - depends on libiwasm.so so build AFTER WAMR build
-add_subdirectory(tests/wamr-linux-cheri-purecap-tests/native_libs)
+    # If requested, also build native .so for test - depends on libiwasm.so so build AFTER WAMR build
+    if ( (DEFINED WAMR_BUILD_NATIVE_TEST_LIB) AND WAMR_BUILD_NATIVE_TEST_LIB)
+        add_subdirectory(tests/wamr-linux-cheri-purecap-tests/native_libs)
+    endif ()
 
 else ()
-add_subdirectory(frontend)
+    add_subdirectory(frontend)
 endif ()
 
 
