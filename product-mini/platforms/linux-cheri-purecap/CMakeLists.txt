@@ -1,4 +1,6 @@
-# Copyright (C) 2023 Verifoxx Limited.  All rights reserved.
+# Copyright (C) 2023 Intel Corporation.  All rights reserved.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 # CMake script for Linux-Cheri-purecap builds.
 # Use CHERI_PURECAP=1/0 (default 1) for Pure-cap vs hybrid compatibility builds
 # Must set CHERI_GNU_TOOLCHAIN_DIR to location of the GNU toolchain root

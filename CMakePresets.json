@@ -24,6 +24,7 @@
         "WAMR_BUILD_LIBC_BUILTIN": "1",
         "WAMR_BUILD_FAST_INTERP": "1",
         "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
+        "WAMR_BUILD_DEBUG_INTERP": "0",
         "WAMR_BUILD_MEMORY_TRACING": "0",
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
@@ -41,7 +42,7 @@
           "intelliSenseMode": "linux-gcc-arm",
           "intelliSenseOptions": {
             "useCompilerDefaults": true,
-            "additionalCompilerArgs": ["-march=morello"]
+            "additionalCompilerArgs": [ "-march=morello" ]
           }
         },
         "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
@@ -67,7 +68,7 @@
       "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
         "CHERI_PURECAP": "1",
-        "MORELLO_PURECAP_LIBS_FOLDER":  "/purecap-lib"
+        "MORELLO_PURECAP_LIBS_FOLDER": "/purecap-lib"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -80,23 +81,83 @@
         }
       }
     },
-        {
-          "inherits": "ARMc64-hybrid-debug",
-          "name": "ARMc64-hybrid-release",
-          "displayName": "Release armC64 Hybrid",
-          "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "NDEBUG": "1"
+    {
+      "inherits": "ARMc64-hybrid-debug",
+      "name": "ARMc64-hybrid-release",
+      "displayName": "Release armC64 Hybrid",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "inherits": "ARMc64-PureCap-debug",
+      "name": "ARMc64-PureCap-release",
+      "displayName": "Release armC64+ PureCap",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "name": "Linux_x86_64_Debug",
+      "displayName": "Linux Debug x86_64",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain_x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux",
+        "WAMR_BUILD_AOT": "0",
+        "WAMR_BUILD_LIBC_BUILTIN": "1",
+        "WAMR_BUILD_FAST_INTERP": "1",
+        "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
+        "WAMR_BUILD_DEBUG_INTERP": "0",
+        "WAMR_BUILD_MEMORY_TRACING": "0",
+        "WAMR_BUILD_SIMD": "0",
+        "WAMR_DISABLE_HW_BOUND_CHECK": "1",
+        "WAMR_APP": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
           }
         },
-        {
-          "inherits": "ARMc64-PureCap-debug",
-          "name": "ARMc64-PureCap-release",
-          "displayName": "Release armC64+ PureCap",
-          "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "NDEBUG": "1"
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
           }
         }
+      }
+    },
+    {
+      "inherits": "Linux_x86_64_Debug",
+      "name": "Linux_x86_64_Release",
+      "displayName": "Linux Release x86_64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    }
   ]
 }

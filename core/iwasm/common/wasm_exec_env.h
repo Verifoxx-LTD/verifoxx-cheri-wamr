@@ -324,18 +324,21 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv * exec_env, unsigned size)
 }
 #endif /* __CHERI__ */
 
-
-static inline void
-wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *__capability prev_top)
-{
 #ifdef __CHERI__
+static inline void
+wasm_exec_env_free_wasm_frame(WASMExecEnv* exec_env, void* __capability prev_top)
+{
     bh_assert((uintptr_t)prev_top >= (uintptr_t)exec_env->wasm_stack_p->bottom);
-    exec_env->wasm_stack_p->top = (uint8*__capability)prev_top;
+    exec_env->wasm_stack_p->top = (uint8 * __capability)prev_top;
+}
 #else
+static inline void
+wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *prev_top)
+{
     bh_assert((uint8*)prev_top >= exec_env->wasm_stack.s.bottom);
     exec_env->wasm_stack.s.top = (uint8*)prev_top;
-#endif
 }
+#endif
 
 /**
  * Get the current WASM stack top pointer.

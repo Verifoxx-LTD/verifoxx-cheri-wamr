@@ -5074,7 +5074,7 @@ typedef struct BranchBlock {
 #ifdef __CHERI__
 } BranchBlock __attribute__((aligned));
 #else
-} BranchBlock __attribute__((align(__BIGGEST_ALIGNMENT__)));
+} BranchBlock;
 #endif
 
 typedef struct WASMLoaderContext {

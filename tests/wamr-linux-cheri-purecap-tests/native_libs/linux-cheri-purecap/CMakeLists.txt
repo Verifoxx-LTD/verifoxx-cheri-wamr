@@ -1,10 +1,9 @@
-# Copyright (C) 2023 Verifoxx Limited.  All rights reserved.
-# CMake script for wamr-app, Linux-Cheri-purecap builds.
-# Use CHERI_PURECAP=1/0 (default 1) for Pure-cap vs hybrid compatibility builds
-# Must set CHERI_GNU_TOOLCHAIN_DIR to location of the GNU toolchain root
-# Use CHERI_STATIC_BUILD=1/0 (default 1) for static linking
-# Use WAMR_APP=1 to build this app
+# Copyright (C) 2023 Intel Corporation.  All rights reserved.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+# CMake file for linux-cheri-purecap to produce native shared object library for WAMR testing.
+# Script assumes the build output folder will be <wamr_build_root>/native-test-lib/<platform> where
+# the WAMR build output folder is <wamr_build_root>/<platform>.
 
 cmake_minimum_required (VERSION 3.14)
 
@@ -122,10 +121,10 @@ message(STATUS "Build Type=${CMAKE_BUILD_TYPE}")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-unused")
 
-set (WAMR_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+set (WAMR_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../..)
 set (WAMR_INCLUDE_DIR "${WAMR_ROOT_DIR}/core/iwasm/include")
 
-set (WAMR_BUILD_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/../../..)
+set (WAMR_BUILD_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/../..)
 set (WAMR_LIBIWASM_DIR "${WAMR_BUILD_ROOT_DIR}/${WAMR_BUILD_PLATFORM}")
 
 add_library (${PROJECT_NAME} SHARED)
@@ -135,9 +134,9 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 14)
 
 set_target_properties (${PROJECT_NAME} PROPERTIES OUTPUT_NAME "wamr-native-test")
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${WAMR_INCLUDE_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}../ ${WAMR_INCLUDE_DIR})
 
-target_sources(${PROJECT_NAME} PRIVATE "cheri_wasm_native_test.h" "cheri_wasm_native_test.cpp")
+target_sources(${PROJECT_NAME} PRIVATE "../cheri_wasm_native_test.h" "../cheri_wasm_native_test.cpp")
 
 # Note on library linking:
 # - libiwasm is only built as shared object
@@ -145,3 +144,4 @@ target_sources(${PROJECT_NAME} PRIVATE "cheri_wasm_native_test.h" "cheri_wasm_na
 target_link_libraries(${PROJECT_NAME} -static-libstdc++ -static-libgcc -L${WAMR_LIBIWASM_DIR} -Wl,-Bstatic,-lm -Wl,-Bdynamic,-liwasm -Wl,-Bdynamic,-lc)
 
 install (TARGETS ${PROJECT_NAME} DESTINATION lib)
+

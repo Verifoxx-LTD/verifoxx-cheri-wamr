@@ -856,7 +856,11 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
         frame->function->total_exec_cnt++;
     }
 #endif
+#ifdef __CHERI__
     wasm_exec_env_free_wasm_frame(exec_env, (void *__capability)frame);
+#else
+    wasm_exec_env_free_wasm_frame(exec_env, (void*)frame);
+#endif
 }
 
 static void
