@@ -1,46 +1,28 @@
-CHERI-WAMR
-==========
+VERIFOXX-CHERI-WAMR
+===================
 
 This is a private "fork" of the WebAssembly Micro Runtime Repository which is modified to be CHERI-capability-aware and support features to compartmentalise executed WASM.
-The version in "main" will build the iwasm program (VM Core) for both CHERI Hybrid and pure-cap on Linux.
-However note the pure-cap version is very cut down and is likely to only run the simplest WASM code!
+The version in "main" will build the iwasm program (VM Core) for both CHERI Hybrid and pure-cap on Linux, but note the pure-cap version is very cut down and is likely to only run the simplest WASM code!
 
-The version in "sandbox" is latest bleeding-edge changes intended to try and fix various issues that cause CHERI capability faults.
-
-**IMPORTANT:** At the moment, iwasm build is not working with linux-cheri-purecap.  Instead, build the WAMR front end by setting WAMR_APP=1 in your CMake options.
-
-# Addendum - Building WAMR front end
-Currently, iwasm is not able to build for CHERI.  This is due to changes to allocate WAMR's memory outside the main app.
-
-Instead, a wamr_app front end is built.  To do this, pass additional flag to CMake or add to CMakePresets.json as follows:
-    WAMR_APP=1
-	
-This will cause CMakeLists.txt in *frontend/* to be included which will build wamr-app instead of iwasm.  Note that wamr-app does not include the *libvm* instead all source code is built into the application.
-
-Basic usage of wamr-app:
-``` Bash
-wamr-app <wasm_file_to_execute>
-```
-
-For full usage run *wamr-app* with no arguments.
-
-wamr-app is functional only in classic interpreter mode, verbose logging is enabled (and cannot be changed) and stack and app heap size are fixed.
-
+The version in "develop" is latest completed changes representing the port to CHERI Morello Linux.
+Interpreter mode is supported, both Fast and Classic, and all build-time flags apart from WAMR_BUILD_DEBUG_INTERP.
+AOT and JIT are not supported currently.
 
 ## Building CHERI-WAMR with CMake
 You can build from the root folder directly with CMake, but this requires a number of flags to configure WAMR and the build system.
 It is therefore recommended to consult *./build_iwasm.sh* which allows you to configure the following:
 - CHERI_PURECAP=[0|1]		(set to 1 for purecap mode, 0 for hybrid)
 - CONFIG_TYPE=Debug|Release
+- NATIVE_TEST_LIB=[0|1]		(set to 1 to additionally build a native test shared object for iwasm, 0 to skip this)
 - INSTALL_PREFIX=<install folder>	(where you want output to be written from cmake *--install*)
 
 This bash script assumes you will be using a toolchain file, see below for more on tihs.
 
-### The Toolchain File
-The Cmake build can use the toolchain file *toolchain.cmake*.  You should edit this file accordingly to specify the path to the GCC and GCC compiler binaries.
+### The Toolchain File on CHERI platforms
+The Cmake build can use the toolchain file *toolchain.cmake* to build for CHERI platforms.  You should edit this file accordingly to specify the path to the GCC and GCC compiler binaries.
 The default provided assumes that their location is on your path.
 
-To use the toolchain file you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain.
+To use the toolchain file for CHERI you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain.
 
 **Use of the toolchain file is optional**.  If you do not use the toolchain file, the cmakelists.txt will attempt to resolve your GNU compilers based on the architecture you are running on.
 If this is aarch64 then it assumes you are building on the morello board.  Otherwise, it assumes you are cross-compiling.
@@ -48,10 +30,24 @@ If this is aarch64 then it assumes you are building on the morello board.  Other
 You will though need to provide the path to the GNU toolchain root, if they are not on your path.
 You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* as a Cmake argument.
 
+### The Toolchain File on Linux x86_64 native platforms
+A basic toolchain file is also provided to build for *Linux* on non-CHERI (assumed to be x86_64) platforms.
+This can be used to build a baseline test-harness for Linux that can run natively.
+
+### Native Test Harness Library
+To call from WASM -> native or native -> WASM requires an implementation of suitable native functions which need to be known by WAMR.
+*iwasm* handles this by loading a DLL (linux shared object library) at runtime and discovering native functions.
+
+The CMake build system supports building a test native library as part of the root-level CMake build.  This can build on Linux x86_64, Linux CHERI Morello Pure-cap and hybrid-cap.  The code can be found in *tests/wamr-linux-cheri-purecap-tests/native_libs* and there is a CMakeLists.txt for each supported target.
+
+The root CMakeLists.txt will build the native libs shared object after building WAMR if CMake flag WAMR_BUILD_NATIVE_TEST_LIB flag is set to 1.
+
+**Please refer to [the Native Test Library ReadMe](./tests/wamr-linux-cheri-purecap-tests/native_libs) for further information.**
+
 ### Building without the bash script
 ``` Bash
 mkdir build && cd build
-cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> -DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [<wamr-build-flags>]
+cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> -DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] [<wamr-build-flags>]
 
 cmake --build .
 cmake --install .
@@ -62,7 +58,15 @@ Where:
 - CHERI_GNU_TOOLCHAIN_DIR is path to the morello gnu toolchain root on the build machine, not required if folder containing binaries is on your bash path OR you are using a toolchain file
 - CHERI_PURECAP is 1 for purecap builds and 0 for hybrid capability builds (default 1)
 - CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring .so libs (default 1)
-- <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).  Note that for purecap we currently have minimal spec of disabling AOT, SIMD and enabling Fast Interp
+- WAMR_BUILD_NATIVE_TEST_LIB is 0 for not additionally building the native test lib, 1 for building it (default 0)
+- <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).
+
+**Note:** For CHERI Morello WAMR build options contain some restrictions:
+- AOT mode is not yet supported so must be 0
+- JIT mode is not supported so must be 0
+- WAMR_BUILD_DEBUG_INTERP is not yet supported
+- WAMR_BUILD_SIMD must be 0
+- WAMR_DISABLE_HW_BOUND_CHECK must be 1
 
 ### Bulding on the Morello Target
 This document assumes you will be cross-compiling, however you can build on the Morello target itself.
@@ -78,6 +82,8 @@ This provides separate configurations for:
 - PureCap Debug
 - Hybrid Release
 - PureCap Release
+- Linux x86_64 Debug (a non-CHERI baseline for santity testing)
+- Linux x86_64 Release (a non-CHERI baseline for santity testing)
 
 To use VS with CMake and this project "out of the box" you will need to have first carried out the following pre-requisite steps:
 1. Enable WSL2 in Windows (10 or 11) and installed a suitable Ubuntu distro
@@ -95,8 +101,15 @@ You must then select the your Ubuntu machine as the build target.  You can then 
 - Debug armC64+ PureCap		(internal name "ARMc64-PureCap-debug")
 - Release armC64 Hybrid		(internal name "ARMc64-hybrid-release")
 - Release armC64+ PureCap	(internal name "ARMc64-PureCap-release")
+- Linux Debug x86_64		(internal name "Linux_x86_64_Debug")
+- Linux Release x86_64		(internal name "Linux_x86_64_Release")
 
 All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
+**NOTE:** Please modify the following flags as necessary to configure your build:
+- WAMR_BUILD_FAST_INTERP			(default 1, set to 0 for classic interpreter mode)
+- WAMR_BUILD_DEBUG_PREPROCESSOR		(default 0, set to 1 for debug info)
+- WAMR_BUILD_MEMORY_TRACING			(default 0, set to 1 for extra trace info)
+- WAMR_BUILD_NATIVE_TEST_LIB		(default 0, set to 1 to additionally build the native test shared object file)
 
 ### Troubleshooting
 1. If your project is located on a virtual drive under windows (i.e a subst drive) then you will have to make this available to WSL2.  Although most files are copied to WSL2 via *rsync*, the Ubuntu installation will still need your virtual drive mounted (i.e available as */mnt/drive_letter*).
@@ -115,7 +128,7 @@ sudo ln -s /mnt/c/Verifoxx /mnt/n
 
 3. You are recommended to add the path to the toolchain binaries to your .bashrc file.  *Ensure this is BEFORE the line shown in the no terminal mode, above.*  However it can be supplied by modifying CMakePresets.json.  The problem though with this is it will reduce the portability of the project.
 
-**Note: The CMakePresets.json is set up with the correct WAMR options to build a version that works with the simple WASM file**
+**Note: The CMakePresets.json is set up with the correct WAMR options to build a version that works in Fast Interpreter mode without a native .so included **
 
 ### Debugging on Morello Board with Visual Studio
 You can remotely debug from Visual Studio with the target being the Morello board.  However, this requires some setup because the debug target is not the same as the build target.
@@ -137,24 +150,32 @@ You can either run gdb on the morello board, or run gdbserver on the morello boa
   "defaults": {},
   "configurations": [
     {
-      "args": [],
-      "comment": "Learn how to configure WSL debugging. For more info, see http://aka.ms/vslinuxdebug",
+      "args": [
+        "-v=5",
+        "--interp",
+        "--native-lib=/root/libwamr-native-test.so",
+        "/root/wamr_natives_and_call_wasm.wasm"
+      ],
       "cwd": "/root",
       "debuggerConfiguration": "gdb",
       "env": {},
       "gdbPath": "/root/morello_gnu/bin/aarch64-none-linux-gnu-gdb",
       "name": "Morello Target",
       "project": "CMakeLists.txt",
-      "projectTarget": "cheri-wamr",
+      "projectTarget": "iwasm",
       "remoteMachineName": "192.168.0.39",
       "type": "cppgdb",
-      "targetArchitecture": "arm64"
+      "targetArchitecture": "arm64",
+      "externalConsole": true,
+      "deployDirectory": "/root/tmp",
+      "disableDeploy": false,
     }
   ]
 }
 ```
 
 Where:
+- *args* are command-line arguments to pass to *iwasm*, run *iwasm --help* for details
 - *cwd* is the working folder for debug session
 - *debuggerConfiguration* should be gdb
 - *gdbPath* is the filepath for the gdb binary.  Version shown above is built for the morello board (i.e runs on morello).
@@ -162,6 +183,9 @@ Where:
 - *remoteMachineName* is the IP address of the Arm morello board
 - *targetArchitecture* must be an architecture known to visual studio; the nearest we can get is "arm64"
 - *name* is the debug target name to display in the debug target selection box.
+- *externalConsole* should be true to correctly view terminal output in VS Debugger window
+- *deployDirectory* is the folder to copy the target to on debugger launch
+- *disableDeploy* should be false
 
 You can now proceed to select debug target as per *name*, above, and then debug.  The process will launch remotely on the Morello board connecting across your internal network.
 
@@ -175,6 +199,24 @@ However, the CMakePresets.json has been specifically set up - and this is why it
 
 The only real problem is that compiler builtins which are pure-cap specific will likely not work.
 
+## WAMR Front-end
+For development purposes a WAMR front-end is provided which can be used instead of iwasm.  This is found in */front-end* folder.
+
+You can build for the front-end instead of iwasm by passing an additional flag to CMake or add to CMakePresets.json as follows:
+    WAMR_APP=1
+	
+(default is 0).
+This will cause the **root** CMakeLists.txt to include the CMakeLists.txt in *frontend/* which will build wamr-app instead of iwasm.  Note that wamr-app does not include the *libvm* instead all source code is built into the application.
+
+Basic usage of wamr-app:
+``` Bash
+wamr-app <wasm_file_to_execute>
+```
+
+For full usage run *wamr-app* with no arguments.
+
+wamr-app is functional in classic or fast interpreter mode, verbose logging is enabled (and cannot be changed) and stack and app heap size are fixed.
+Test native functions are included by building them into the wamr-app program.
 
 
 ORIGINAL DOCUMENT -> WebAssembly Micro Runtime
