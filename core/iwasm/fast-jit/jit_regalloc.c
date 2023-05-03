@@ -156,6 +156,7 @@ rc_get_vr(RegallocContext *rc, JitReg vreg)
     unsigned no = jit_reg_no(vreg);
 
     bh_assert(jit_reg_is_variable(vreg));
+    bh_assert(kind < JIT_REG_KIND_L32);
 
     return &rc->vregs[kind][no];
 }
@@ -175,6 +176,7 @@ rc_get_hr(RegallocContext *rc, JitReg hreg)
     unsigned no = jit_reg_no(hreg);
 
     bh_assert(jit_reg_is_variable(hreg) && jit_cc_is_hreg(rc->cc, hreg));
+    bh_assert(kind < JIT_REG_KIND_L32);
 
     return &rc->hregs[kind][no];
 }
@@ -208,7 +210,9 @@ static unsigned
 get_reg_stride(JitReg reg)
 {
     static const uint8 strides[] = { 0, 1, 2, 1, 2, 2, 4, 8, 0 };
-    return strides[jit_reg_kind(reg)];
+    uint32 kind = jit_reg_kind(reg);
+    bh_assert(kind <= JIT_REG_KIND_L32);
+    return strides[kind];
 }
 
 /**
@@ -406,6 +410,13 @@ collect_distances(RegallocContext *rc, JitBasicBlock *basic_block)
 
     JIT_FOREACH_INSN(basic_block, insn)
     {
+#if WASM_ENABLE_SHARED_MEMORY != 0
+        /* fence insn doesn't have any operand, hence, no regs involved */
+        if (insn->opcode == JIT_OP_FENCE) {
+            continue;
+        }
+#endif
+
         JitRegVec regvec = jit_insn_opnd_regs(insn);
         unsigned i;
         JitReg *regp;
@@ -582,12 +593,16 @@ static JitReg
 allocate_hreg(RegallocContext *rc, JitReg vreg, JitInsn *insn, int distance)
 {
     const int kind = jit_reg_kind(vreg);
-    const HardReg *hregs = rc->hregs[kind];
-    const unsigned hreg_num = jit_cc_hreg_num(rc->cc, kind);
+    const HardReg *hregs;
+    unsigned hreg_num;
     JitReg hreg, vreg_to_reload = 0;
     int min_distance = distance, vr_distance;
     VirtualReg *vr = rc_get_vr(rc, vreg);
     unsigned i;
+
+    bh_assert(kind < JIT_REG_KIND_L32);
+    hregs = rc->hregs[kind];
+    hreg_num = jit_cc_hreg_num(rc->cc, kind);
 
     if (hreg_num == 0)
     /* Unsupported hard register kind.  */
@@ -729,6 +744,13 @@ allocate_for_basic_block(RegallocContext *rc, JitBasicBlock *basic_block,
 
     JIT_FOREACH_INSN_REVERSE(basic_block, insn)
     {
+#if WASM_ENABLE_SHARED_MEMORY != 0
+        /* fence insn doesn't have any operand, hence, no regs involved */
+        if (insn->opcode == JIT_OP_FENCE) {
+            continue;
+        }
+#endif
+
         JitRegVec regvec = jit_insn_opnd_regs(insn);
         unsigned first_use = jit_insn_opnd_first_use(insn);
         unsigned i;

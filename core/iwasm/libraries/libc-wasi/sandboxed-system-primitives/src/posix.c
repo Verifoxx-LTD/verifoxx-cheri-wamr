@@ -685,9 +685,20 @@ fd_table_insert_existing(struct fd_table *ft, __wasi_fd_t in, int out)
     struct fd_object *fo;
     __wasi_errno_t error;
 
-    if (fd_determine_type_rights(out, &type, &rights_base, &rights_inheriting)
-        != 0)
+    error =
+        fd_determine_type_rights(out, &type, &rights_base, &rights_inheriting);
+    if (error != 0) {
+#ifdef BH_PLATFORM_EGO
+        /**
+         * since it is an already opened file and we can assume the opened file
+         * has all necessary rights no matter how to get
+         */
+        if (error != __WASI_ENOTSUP)
+            return false;
+#else
         return false;
+#endif
+    }
 
     error = fd_object_new(type, &fo);
     if (error != 0)
@@ -2602,6 +2613,8 @@ wasmtime_ssp_poll_oneoff(
         }
 #endif
         *nevents = 1;
+        if (out[0].error != 0)
+            return convert_errno(out[0].error);
         return 0;
     }
 
@@ -2642,8 +2655,8 @@ wasmtime_ssp_poll_oneoff(
                     pfds[i] = (struct pollfd){
                         .fd = fd_number(fos[i]),
                         .events = s->u.type == __WASI_EVENTTYPE_FD_READ
-                                      ? POLLRDNORM
-                                      : POLLWRNORM,
+                                      ? POLLIN
+                                      : POLLOUT,
                     };
                 }
                 else {
@@ -2754,7 +2767,7 @@ wasmtime_ssp_poll_oneoff(
                             __WASI_EVENT_FD_READWRITE_HANGUP,
                     };
                 }
-                else if ((pfds[i].revents & (POLLRDNORM | POLLWRNORM)) != 0) {
+                else if ((pfds[i].revents & (POLLIN | POLLOUT)) != 0) {
                     // Read or write possible.
                     out[(*nevents)++] = (__wasi_event_t){
                         .userdata = in[i].userdata,
