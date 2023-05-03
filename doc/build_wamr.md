@@ -2,8 +2,7 @@ CHERI LINUX: Build WAMR vmcore (iwasm)
 ======================================
 Please refer to the root [ReadMe](../README.md) for full instructions on how to build.
 
-Note that all options are applicable for building from the root folder, or from building directly within the *product-mini/platforms/linux-cheri-purecap* folder.
-
+Note that all options are applicable for building from the root folder, or from building directly within the *product-mini/platforms/linux-cheri-purecap* folder.  However note that when building from the root folder it is also optionally possible to build a native shared object library for functions which can be called from WASM, and which can call WASM.
 
 
 ORIGINAL DOCUMENT -> Build WAMR vmcore (iwasm)

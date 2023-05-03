@@ -17,3 +17,6 @@ support.  Although LLVM 8.0 or later supports WASM, to build the *wasm32-unknown
 In future we should add either full instructions to download and build the LLVM provided from WASI or (better) an environment e.g a docker image to automatically build all the test WASMs directly from the C code or WAT.
 
 For now, we include all WASMs instead even though they can be considered an "intermediate" fileset.
+
+## Native Libs
+This folder makes a unix shared object (.so) containing native functions, for use with iwasm native testing.
