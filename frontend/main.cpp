@@ -176,6 +176,7 @@ protected:
             mem_mgr_instance = new CheriMemMgr{ STACK_SIZE, HEAP_SIZE};
             mem_mgr_instance->setup_wasm_stack();
             mem_mgr_instance->wasm_memory_init();
+            return true;
         }
         catch (exception&)
         {
@@ -186,20 +187,6 @@ protected:
             }
             return false;
         }
-
-
-        if (wasm_memory_init_with_allocator((void*)malloc, nullptr, (void*)free)
-            && wasm_runtime_set_default_running_mode(Mode_Interp)
-            && wasm_native_init()
-            && runtime_signal_init()
-            )
-        {
-            return true;
-        }
-
-        wasm_runtime_memory_destroy();
-        return false;
-        
     }
 };
 

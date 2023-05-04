@@ -86,7 +86,13 @@ public:
 
     bool wasm_memory_init()
     {
-        if (wasm_memory_init_with_allocator((void*)m_malloc_func, (void*)m_realloc_func, (void*)m_free_func)
+        MemAllocOption mem_alloc_option;
+        mem_alloc_option.allocator.malloc_func = (void*)m_malloc_func;
+        mem_alloc_option.allocator.realloc_func = (void*)m_realloc_func;
+        mem_alloc_option.allocator.free_func = (void*)m_free_func;
+        mem_alloc_option.allocator.user_data = NULL;    // Not used, WASM_MEM_ALLOC_WITH_USER_DATA not defined anyway
+
+        if (wasm_runtime_memory_init(Alloc_With_Allocator, &mem_alloc_option)
             && wasm_runtime_set_default_running_mode(Mode_Interp)
             && wasm_native_init()
             && runtime_signal_init()

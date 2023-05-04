@@ -10,6 +10,10 @@
 extern "C" {
 #endif
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "bh_platform.h"
 #include "ems_gc.h"
 
@@ -24,7 +28,11 @@ typedef enum hmu_type_enum {
 } hmu_type_t;
 
 typedef struct hmu_struct {
+#ifdef __CHERI__
+    gc_uint32 header __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
     gc_uint32 header;
+#endif
 } hmu_t;
 
 #if BH_ENABLE_GC_VERIFY != 0
@@ -204,6 +212,10 @@ set_hmu_normal_node_next(hmu_normal_node_t *node, hmu_normal_node_t *next)
     }
 }
 
+#ifdef __CHERI__
+ /* On CHERI the entire structure must be aligned.  Packing is ok because hmu_header will be 16 bytes */
+#define __attr_packed __attribute__((aligned(__BIGGEST_ALIGNMENT__),packed))
+#else /* __CHERI__ */
 /**
  * Define hmu_tree_node as a packed struct, since it is at the 4-byte
  * aligned address and the size of hmu_head is 4, so in 64-bit target,
@@ -221,7 +233,8 @@ __pragma(pack(push, 1));
 #endif
 #else /* else of UINTPTR_MAX == UINT64_MAX */
 #define __attr_packed
-#endif
+#endif /* __UINTPTR_NAX == UINT64_MAX */
+#endif /* __CHERI__*/
 
 typedef struct hmu_tree_node {
     hmu_t hmu_header;
@@ -231,20 +244,38 @@ typedef struct hmu_tree_node {
     gc_size_t size;
 } __attr_packed hmu_tree_node_t;
 
-#if UINTPTR_MAX == UINT64_MAX
+#if UINTPTR_MAX == UINT64_MAX && !defined(__CHERI__)
 #if defined(_MSC_VER)
 __pragma(pack(pop));
 #endif
 #endif
 
+#ifdef __CHERI__
+bh_static_assert(sizeof(hmu_t) == sizeof(void*));
+bh_static_assert(sizeof(hmu_tree_node_t) == 5 * sizeof(void*));
+bh_static_assert(offsetof(hmu_tree_node_t, left) == sizeof(void*));
+#else
 bh_static_assert(sizeof(hmu_tree_node_t) == 8 + 3 * sizeof(void *));
 bh_static_assert(offsetof(hmu_tree_node_t, left) == 4);
+#endif
 
+#ifdef __CHERI__
+/* On CHERI there the builtin provides the quickest way to check alignment.
+   This avoids the potential for the compiler to not optimise the assert logic
+   to a single instruction.
+ */
+#define ASSERT_TREE_NODE_ALIGNED_ACCESS(tree_node)                              \
+    do {                                                                        \
+        bh_assert( cheri_is_aligned(&tree_node->left, __BIGGEST_ALIGNMENT__));  \
+    } while(0)
+
+#else
 #define ASSERT_TREE_NODE_ALIGNED_ACCESS(tree_node)                          \
     do {                                                                    \
         bh_assert((((uintptr_t)&tree_node->left) & (sizeof(uintptr_t) - 1)) \
                   == 0);                                                    \
     } while (0)
+#endif /* __CHERI__ */
 
 typedef struct gc_heap_struct {
     /* for double checking*/
@@ -255,8 +286,12 @@ typedef struct gc_heap_struct {
 
     korp_mutex lock;
 
+#ifdef __CHERI__
+    hmu_normal_list_t kfc_normal_list[HMU_NORMAL_NODE_CNT] __attribute__((aligned(__BIGGEST_ALIGNMENT__))); // Align to support pointer access
+    uint8 kfc_tree_root_buf[sizeof(hmu_tree_node_t)] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));   // Align to support pointer access
+    hmu_tree_node_t* kfc_tree_root __attribute__((aligned(__BIGGEST_ALIGNMENT__))); // Must align due to pointer access on CHERI
+#else
     hmu_normal_list_t kfc_normal_list[HMU_NORMAL_NODE_CNT];
-
 #if UINTPTR_MAX == UINT64_MAX
     /* make kfc_tree_root_buf 4-byte aligned and not 8-byte aligned,
        so kfc_tree_root's left/right/parent fields are 8-byte aligned
@@ -267,6 +302,7 @@ typedef struct gc_heap_struct {
     /* point to kfc_tree_root_buf, the order in kfc_tree is:
          size[left] <= size[cur] < size[right] */
     hmu_tree_node_t *kfc_tree_root;
+#endif /* __CHERI__ */
 
     /* whether heap is corrupted, e.g. the hmu nodes are modified
        by user */

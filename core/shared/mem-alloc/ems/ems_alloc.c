@@ -42,13 +42,13 @@ remove_tree_node(gc_heap_t *heap, hmu_tree_node_t *p)
     if (p == p->parent->right) {
         /* Don't use `slot = &p->parent->right` to avoid compiler warning */
         slot = (hmu_tree_node_t **)((uint8 *)p->parent
-                                    + offsetof(hmu_tree_node_t, right));
+                                    + (size_t)offsetof(hmu_tree_node_t, right));
     }
     else if (p == p->parent->left) {
         /* p should be a child of its parent */
         /* Don't use `slot = &p->parent->left` to avoid compiler warning */
         slot = (hmu_tree_node_t **)((uint8 *)p->parent
-                                    + offsetof(hmu_tree_node_t, left));
+                                    + (size_t)offsetof(hmu_tree_node_t, left));
     }
     else {
         goto fail;
