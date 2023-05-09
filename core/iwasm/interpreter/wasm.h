@@ -528,8 +528,8 @@ struct WASMModule {
     uint64 load_size;
 #endif
 
-#if WASM_ENABLE_DEBUG_INTERP != 0                    \
-    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT \
+#if WASM_ENABLE_DEBUG_INTERP != 0                         \
+    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
         && WASM_ENABLE_LAZY_JIT != 0)
     /**
      * List of instances referred to this module. When source debugging
@@ -620,6 +620,9 @@ struct WASMModule {
        since no need to enable llvm jit compilation for Mode_Interp and
        Mode_Fast_JIT, so as to improve performance for them */
     bool enable_llvm_jit_compilation;
+    /* The count of groups which finish compiling the fast jit
+       functions in that group */
+    uint32 fast_jit_ready_groups;
 #endif
 };
 

@@ -548,8 +548,9 @@ wasm_runtime_unload(WASMModuleCommon *module);
 /* Internal API */
 WASMModuleInstanceCommon *
 wasm_runtime_instantiate_internal(WASMModuleCommon *module, bool is_sub_inst,
-                                  uint32 stack_size, uint32 heap_size,
-                                  char *error_buf, uint32 error_buf_size);
+                                  WASMExecEnv *exec_env_main, uint32 stack_size,
+                                  uint32 heap_size, char *error_buf,
+                                  uint32 error_buf_size);
 
 /* Internal API */
 void
@@ -558,8 +559,8 @@ wasm_runtime_deinstantiate_internal(WASMModuleInstanceCommon *module_inst,
 
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN WASMModuleInstanceCommon *
-wasm_runtime_instantiate(WASMModuleCommon *module, uint32 stack_size,
-                         uint32 heap_size, char *error_buf,
+wasm_runtime_instantiate(WASMModuleCommon *module, uint32 default_stack_size,
+                         uint32 host_managed_heap_size, char *error_buf,
                          uint32 error_buf_size);
 
 /* See wasm_export.h for description */
@@ -665,6 +666,11 @@ wasm_runtime_call_wasm_v(WASMExecEnv *exec_env,
                          uint32 num_results, wasm_val_t *results,
                          uint32 num_args, ...);
 
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN bool
+wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_index,
+                           uint32 argc, uint32 argv[]);
+
 #if WASM_ENABLE_DEBUG_INTERP != 0
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN uint32
@@ -675,27 +681,6 @@ wasm_runtime_start_debug_instance_with_port(WASMExecEnv *exec_env,
 WASM_RUNTIME_API_EXTERN uint32
 wasm_runtime_start_debug_instance(WASMExecEnv *exec_env);
 #endif
-
-/**
- * Call a function reference of a given WASM runtime instance with
- * arguments.
- *
- * @param exec_env the execution environment to call the function
- *   which must be created from wasm_create_exec_env()
- * @param element_indices the function ference indicies, usually
- *   prvovided by the caller of a registed native function
- * @param argc the number of arguments
- * @param argv the arguments.  If the function method has return value,
- *   the first (or first two in case 64-bit return value) element of
- *   argv stores the return value of the called WASM function after this
- *   function returns.
- *
- * @return true if success, false otherwise and exception will be thrown,
- *   the caller can call wasm_runtime_get_exception to get exception info.
- */
-bool
-wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_indices,
-                           uint32 argc, uint32 argv[]);
 
 bool
 wasm_runtime_create_exec_env_singleton(WASMModuleInstanceCommon *module_inst);
@@ -740,6 +725,23 @@ wasm_runtime_set_custom_data(WASMModuleInstanceCommon *module_inst,
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN void *
 wasm_runtime_get_custom_data(WASMModuleInstanceCommon *module_inst);
+
+/* Internal API */
+uint32
+wasm_runtime_module_malloc_internal(WASMModuleInstanceCommon *module_inst,
+                                    WASMExecEnv *exec_env, uint32 size,
+                                    void **p_native_addr);
+
+/* Internal API */
+uint32
+wasm_runtime_module_realloc_internal(WASMModuleInstanceCommon *module_inst,
+                                     WASMExecEnv *exec_env, uint32 ptr,
+                                     uint32 size, void **p_native_addr);
+
+/* Internal API */
+void
+wasm_runtime_module_free_internal(WASMModuleInstanceCommon *module_inst,
+                                  WASMExecEnv *exec_env, uint32 ptr);
 
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN uint32

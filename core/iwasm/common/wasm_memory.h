@@ -8,6 +8,7 @@
 
 #include "bh_common.h"
 #include "../include/wasm_export.h"
+#include "../interpreter/wasm_runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,9 +24,15 @@ wasm_runtime_memory_destroy();
 unsigned
 wasm_runtime_memory_pool_size();
 
-bool
-wasm_memory_init_with_allocator(void* _malloc_func, void* _realloc_func,
-    void* _free_func);
+#if !defined(OS_ENABLE_HW_BOUND_CHECK)              \
+    || WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0 \
+    || WASM_ENABLE_BULK_MEMORY != 0
+uint32
+wasm_get_num_bytes_per_page(WASMMemoryInstance *memory, void *node);
+
+uint32
+wasm_get_linear_memory_size(WASMMemoryInstance *memory, void *node);
+#endif
 
 #ifdef __cplusplus
 }

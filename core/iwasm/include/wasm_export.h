@@ -467,14 +467,14 @@ wasm_runtime_set_wasi_ns_lookup_pool(wasm_module_t module, const char *ns_lookup
  * Instantiate a WASM module.
  *
  * @param module the WASM module to instantiate
- * @param stack_size the default stack size of the module instance when the
+ * @param default_stack_size the default stack size of the module instance when the
  *        exec env's operation stack isn't created by user, e.g. API
  *        wasm_application_execute_main() and wasm_application_execute_func()
  *        create the operation stack internally with the stack size specified
  *        here. And API wasm_runtime_create_exec_env() creates the operation
  *        stack with stack size specified by its parameter, the stack size
  *        specified here is ignored.
- * @param heap_size the default heap size of the module instance, a heap will
+ * @param host_managed_heap_size the default heap size of the module instance, a heap will
  *        be created besides the app memory space. Both wasm app and native
  *        function can allocate memory from the heap.
  * @param error_buf buffer to output the error info if failed
@@ -484,7 +484,7 @@ wasm_runtime_set_wasi_ns_lookup_pool(wasm_module_t module, const char *ns_lookup
  */
 WASM_RUNTIME_API_EXTERN wasm_module_inst_t
 wasm_runtime_instantiate(const wasm_module_t module,
-                         uint32_t stack_size, uint32_t heap_size,
+                         uint32_t default_stack_size, uint32_t host_managed_heap_size,
                          char *error_buf, uint32_t error_buf_size);
 
 /**
@@ -799,6 +799,31 @@ wasm_runtime_call_wasm_v(wasm_exec_env_t exec_env,
                          wasm_function_inst_t function,
                          uint32_t num_results, wasm_val_t results[],
                          uint32_t num_args, ...);
+
+/**
+ * Call a function reference of a given WASM runtime instance with
+ * arguments.
+ *
+ * Note: this can be used to call a function which is not exported
+ * by the module explicitly. You might consider it as an abstraction
+ * violation.
+ *
+ * @param exec_env the execution environment to call the function
+ *   which must be created from wasm_create_exec_env()
+ * @param element_index the function reference index, usually
+ *   prvovided by the caller of a registed native function
+ * @param argc the number of arguments
+ * @param argv the arguments.  If the function method has return value,
+ *   the first (or first two in case 64-bit return value) element of
+ *   argv stores the return value of the called WASM function after this
+ *   function returns.
+ *
+ * @return true if success, false otherwise and exception will be thrown,
+ *   the caller can call wasm_runtime_get_exception to get exception info.
+ */
+WASM_RUNTIME_API_EXTERN bool
+wasm_runtime_call_indirect(wasm_exec_env_t exec_env, uint32_t element_index,
+                           uint32_t argc, uint32_t argv[]);
 
 /**
  * Find the unique main function from a WASM module instance

@@ -115,6 +115,7 @@ set (CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 set (CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS "")
 
 set (CMAKE_C_STANDARD 99)
+set (CMAKE_CXX_STANDARD 14)
 
 enable_language(C CXX ASM)
 
@@ -173,6 +174,11 @@ if (NOT DEFINED WAMR_BUILD_LIB_PTHREAD)
   set (WAMR_BUILD_LIB_PTHREAD 0)
 endif ()
 
+if (NOT DEFINED WAMR_BUILD_LIB_WASI_THREADS)
+  # Disable wasi threads library by default
+  set (WAMR_BUILD_LIB_WASI_THREADS 0)
+endif()
+
 if (NOT DEFINED WAMR_BUILD_MINI_LOADER)
   # Disable wasm mini loader by default
   set (WAMR_BUILD_MINI_LOADER 0)
@@ -204,11 +210,6 @@ if (WAMR_BUILD_DEBUG_INTERP EQUAL 1)
   set (WAMR_BUILD_SIMD 0)
 endif ()
 
-if (COLLECT_CODE_COVERAGE EQUAL 1)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
-endif ()
-
 set (WAMR_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 
 include (${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake)
@@ -233,7 +234,6 @@ add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE})
 
 check_pie_supported()
 set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON LINKER_LANGUAGE CXX)
-set_property(TARGET iwasm PROPERTY CXX_STANDARD 14)
 
 target_link_options(iwasm PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker iwasm.map")
 
