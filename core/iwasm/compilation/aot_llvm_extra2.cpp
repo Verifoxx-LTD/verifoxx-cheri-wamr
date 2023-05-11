@@ -4,7 +4,15 @@
  */
 
 #include <llvm-c/TargetMachine.h>
-#include <llvm/MC/TargetRegistry.h>
+
+#if defined(__has_include)
+#if __has_include("llvm/MC/TargetRegistry.h")
+#include <llvm/MC/TargetRegistry.h> // llvm-14
+#else
+#include <llvm/Support/TargetRegistry.h>    // llvm-11
+#endif /* __has_include() */
+#endif /* defined(__has_include)*/
+
 #include <llvm/Target/TargetMachine.h>
 
 #include "bh_assert.h"
