@@ -36,14 +36,17 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+	printf("Copying contents of %s to %s...\n", argv[1], argv[2]);
     while ((n = read(in, buf, BUFSIZ)) > 0) {
         char* ptr = buf;
         while (n > 0) {
+			printf("Read %zu bytes...\n", n);
             m = write(out, ptr, (size_t)n);
             if (m < 0) {
                 fprintf(stderr, "write error: %s\n", strerror(errno));
                 exit(1);
             }
+			printf("Wrote %zu bytes...\n", m);
             n -= m;
             ptr += m;
         }
@@ -54,5 +57,6 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+	printf("**Finished**\n");
     return EXIT_SUCCESS;
 }

@@ -404,7 +404,7 @@ main(int argc, char* argv[])
     int instance_port = 0;
 #endif
 
-    LOG_FATAL("WAMR Launched!\n");
+    LOG_DEBUG("WAMR Launched!\n");
 
     /* Process options. */
     for (argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -782,6 +782,6 @@ fail1:
     /* destroy runtime environment */
     wasm_runtime_destroy();
 
-    LOG_FATAL("WAMR Exits with return code %d!\n", ret);
+    LOG_DEBUG("WAMR Exits with return code %d!\n", ret);
     return ret;
 }
