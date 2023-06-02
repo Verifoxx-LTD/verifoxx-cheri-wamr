@@ -20,3 +20,6 @@ For now, we include all WASMs instead even though they can be considered an "int
 
 ## Native Libs
 This folder makes a unix shared object (.so) containing native functions, for use with iwasm native testing.
+
+## WASI-testsuite
+Support to run the WASI-testsuite remotely on Morello is provided, full details and needed scripts can be found [in this folder](wasi-testsuite).

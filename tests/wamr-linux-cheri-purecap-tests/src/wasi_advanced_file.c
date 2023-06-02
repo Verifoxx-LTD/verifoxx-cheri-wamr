@@ -19,9 +19,9 @@
 
 #define PATH_TEST_FOLDER "./test"
 #define PATH_TEST_FILE (PATH_TEST_FOLDER "/test.txt")
-#define FILE_TEXT "Hello, world!"
+#define FILE_TEXT "Hello, there!"
 #define WORLD_OFFSET 7
-#define NAME_REPLACMENT "Peter" // Must be same length as "world"
+#define NAME_REPLACMENT "world" // Must be same length as "there"
 #define NAME_REPLACMENT_LEN (sizeof(NAME_REPLACMENT) - 1)
 #define ADDITIONAL_SPACE 1 * 1024 * 1024
 
