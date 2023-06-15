@@ -48,6 +48,8 @@
 #include <cstring>
 #include "../aot/aot_runtime.h"
 #include "aot_llvm.h"
+#include "bh_log.h"
+
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -332,7 +334,17 @@ aot_apply_llvm_new_pass_manager(AOTCompContext *comp_ctx, LLVMModuleRef module)
         /* Apply Vectorize related passes for AOT mode */
         FPM.addPass(LoopVectorizePass());
         FPM.addPass(SLPVectorizerPass());
-        FPM.addPass(LoadStoreVectorizerPass());
+
+        auto AS = M->getDataLayout().getDefaultGlobalsAddressSpace();
+
+        // Can only perform loadstorevectorizepass if index size == pointer size, otherwise 
+        if (M->getDataLayout().getIndexSizeInBits(AS) == M->getDataLayout().getPointerSizeInBits(AS)) {
+            LOG_VERBOSE("Adding LoadStoreVectorizePass");
+            FPM.addPass(LoadStoreVectorizerPass());
+        }
+        else {
+            LOG_VERBOSE("Skipping LoadStoreVectorizePass as target index size != pointer size");
+        }
 
         /*
         FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass()));

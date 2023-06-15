@@ -161,6 +161,11 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "LLVM Include dirs: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM definitions: ${LLVM_DEFINITIONS}")
 message(STATUS "LLVM Libs: ${LLVM_AVAILABLE_LIBS}")
+message(STATUS "LLVM Library dirs: ${LLVM_LIBRARY_DIRS}")
+
+# Set link path so we can find at runtime
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 
 if (WAMR_BUILD_DEBUG_AOT EQUAL 1)
   if(LLVM_BUILD_MAIN_SRC_DIR)
@@ -251,6 +256,11 @@ endif()
 
 # We disable these flags by default to stay the same with wasm runtime
 # set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mindirect-branch=thunk -mfunction-return=thunk")
+
+# Note: If linking against static LLVM Libs with debug info, wamrc will end up huge
+# If you run out of RAM on the target machine (and get a sig kill sent to the linker) then
+# try uncommenting the below first
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
 
 if (NOT MSVC)
   add_definitions(-D_FORTIFY_SOURCE=2)

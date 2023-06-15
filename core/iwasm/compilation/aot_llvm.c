@@ -81,7 +81,7 @@ aot_add_llvm_func(AOTCompContext *comp_ctx, LLVMModuleRef module,
     for (i = 1; i < aot_func_type->result_count; i++, j++) {
         param_types[j] =
             TO_LLVM_TYPE(aot_func_type->types[aot_func_type->param_count + i]);
-        if (!(param_types[j] = LLVMPointerType(param_types[j], 0))) {
+        if (!(param_types[j] = LLVMPointerType(param_types[j], comp_ctx->target_address_space))) {
             aot_set_last_error("llvm get pointer type failed.");
             goto fail;
         }
@@ -244,7 +244,7 @@ create_argv_buf(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         return false;
     }
 
-    if (!(int32_ptr_type = LLVMPointerType(INT32_PTR_TYPE, 0))) {
+    if (!(int32_ptr_type = LLVMPointerType(INT32_PTR_TYPE, comp_ctx->target_address_space))) {
         aot_set_last_error("llvm add pointer type failed");
         return false;
     }
@@ -837,7 +837,7 @@ create_func_type_indexes(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         return false;
     }
 
-    if (!(int32_ptr_type = LLVMPointerType(INT32_PTR_TYPE, 0))) {
+    if (!(int32_ptr_type = LLVMPointerType(INT32_PTR_TYPE, comp_ctx->target_address_space))) {
         aot_set_last_error("llvm get pointer type failed.");
         return false;
     }
@@ -1002,7 +1002,7 @@ aot_create_func_context(AOTCompData *comp_data, AOTCompContext *comp_ctx,
         goto fail;
     }
 
-    if (!(int8_ptr_type = LLVMPointerType(INT8_PTR_TYPE, 0))) {
+    if (!(int8_ptr_type = LLVMPointerType(INT8_PTR_TYPE, comp_ctx->target_address_space))) {
         aot_set_last_error("llvm add pointer type failed.");
         goto fail;
     }
@@ -1089,7 +1089,7 @@ aot_create_func_contexts(AOTCompData *comp_data, AOTCompContext *comp_ctx)
 }
 
 static bool
-aot_set_llvm_basic_types(AOTLLVMTypes *basic_types, LLVMContextRef context)
+aot_set_llvm_basic_types(AOTLLVMTypes *basic_types, LLVMContextRef context, unsigned AS)
 {
     basic_types->int1_type = LLVMInt1TypeInContext(context);
     basic_types->int8_type = LLVMInt8TypeInContext(context);
@@ -1102,20 +1102,20 @@ aot_set_llvm_basic_types(AOTLLVMTypes *basic_types, LLVMContextRef context)
 
     basic_types->meta_data_type = LLVMMetadataTypeInContext(context);
 
-    basic_types->int8_ptr_type = LLVMPointerType(basic_types->int8_type, 0);
+    basic_types->int8_ptr_type = LLVMPointerType(basic_types->int8_type, AS);
 
     if (basic_types->int8_ptr_type) {
         basic_types->int8_pptr_type =
-            LLVMPointerType(basic_types->int8_ptr_type, 0);
+            LLVMPointerType(basic_types->int8_ptr_type, AS);
     }
 
-    basic_types->int16_ptr_type = LLVMPointerType(basic_types->int16_type, 0);
-    basic_types->int32_ptr_type = LLVMPointerType(basic_types->int32_type, 0);
-    basic_types->int64_ptr_type = LLVMPointerType(basic_types->int64_type, 0);
+    basic_types->int16_ptr_type = LLVMPointerType(basic_types->int16_type, AS);
+    basic_types->int32_ptr_type = LLVMPointerType(basic_types->int32_type, AS);
+    basic_types->int64_ptr_type = LLVMPointerType(basic_types->int64_type, AS);
     basic_types->float32_ptr_type =
-        LLVMPointerType(basic_types->float32_type, 0);
+        LLVMPointerType(basic_types->float32_type, AS);
     basic_types->float64_ptr_type =
-        LLVMPointerType(basic_types->float64_type, 0);
+        LLVMPointerType(basic_types->float64_type, AS);
 
     basic_types->i8x16_vec_type = LLVMVectorType(basic_types->int8_type, 16);
     basic_types->i16x8_vec_type = LLVMVectorType(basic_types->int16_type, 8);
@@ -1125,7 +1125,7 @@ aot_set_llvm_basic_types(AOTLLVMTypes *basic_types, LLVMContextRef context)
     basic_types->f64x2_vec_type = LLVMVectorType(basic_types->float64_type, 2);
 
     basic_types->v128_type = basic_types->i64x2_vec_type;
-    basic_types->v128_ptr_type = LLVMPointerType(basic_types->v128_type, 0);
+    basic_types->v128_ptr_type = LLVMPointerType(basic_types->v128_type, AS);
 
     basic_types->i1x2_vec_type = LLVMVectorType(basic_types->int1_type, 2);
 
@@ -1308,7 +1308,11 @@ static const char *valid_abis[] = {
     "ilp32d",
     "lp64",
     "lp64f",
-    "lp64d"
+    "lp64d",
+    "purecap",      /* CHERI support */
+    "musl_purecap",
+    "gnu_purecap",
+    "cheri_purecap"
 };
 /* clang-format on */
 
@@ -1545,10 +1549,12 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
     char *triple_norm_new = NULL, *cpu_new = NULL;
     char *err = NULL, *fp_round = "round.tonearest",
          *fp_exce = "fpexcept.strict";
-    char triple_buf[32] = { 0 }, features_buf[128] = { 0 };
+    char triple_buf[48] = { 0 };        // Must be big enough to hold any size of triple
+    char features_buf[128] = { 0 };
     uint32 opt_level, size_level, i;
     LLVMCodeModel code_model;
     LLVMTargetDataRef target_data_ref;
+    char *abi_string = NULL;        // Default null but used for Morello Purecap
 
     /* Allocate memory */
     if (!(comp_ctx = wasm_runtime_malloc(sizeof(AOTCompContext)))) {
@@ -1835,6 +1841,10 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
                 else
                     vendor_sys = "-pc-windows-";
             }
+            else if (strstr(features, "morello") != NULL) {
+                /* Morello Support*/
+                vendor_sys = "-unknown-linux-";
+            }
             else {
                 vendor_sys = "-pc-linux-";
             }
@@ -1851,6 +1861,13 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
                                  - strlen(vendor_sys)),
                         abi, (uint32)strlen(abi));
             triple = triple_buf;
+
+            // On CHERI platforms, set the needed ABI to purecap as applicable provided features also set
+            if (strstr(features, "+morello") != NULL && strstr(features, "+c64") != NULL && strstr(abi, "purecap") != NULL)
+            {
+                abi_string = "purecap";
+            }
+
         }
         else if (arch) {
             /* Construct target triple: <arch>-<vendor>-<sys>-<abi> */
@@ -2010,6 +2027,10 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
         os_printf("  cpu features:  %s\n", features);
         os_printf("  opt level:     %d\n", opt_level);
         os_printf("  size level:    %d\n", size_level);
+        if (abi_string) {
+            os_printf("  ABI option:    %s\n", abi_string);
+        }
+
         switch (option->output_format) {
             case AOT_LLVMIR_UNOPT_FILE:
                 os_printf("  output format: unoptimized LLVM IR\n");
@@ -2059,7 +2080,7 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
         if (!(comp_ctx->target_machine = LLVMCreateTargetMachineWithOpts(
                   target, triple_norm, cpu, features, opt_level,
                   LLVMRelocStatic, code_model, false,
-                  option->stack_usage_file))) {
+                  option->stack_usage_file, abi_string))) {
             aot_set_last_error("create LLVM target machine failed.");
             goto fail;
         }
@@ -2098,7 +2119,17 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
         aot_set_last_error("create LLVM target data layout failed.");
         goto fail;
     }
-    comp_ctx->pointer_size = LLVMPointerSize(target_data_ref);
+
+    // Appy the target's data layout to our WASM module
+    set_module_data_layout(target_data_ref, comp_ctx->module);
+
+    comp_ctx->pointer_size = LLVMPointerSizeForAS(target_data_ref, getLLVMDefaultGlobalsAS(target_data_ref));
+    
+    unsigned int pointer_alloc_AS = getLLVMDefaultAllocAS(target_data_ref);
+
+    // Write the AS into the comp_ctx
+    comp_ctx->target_address_space = pointer_alloc_AS;
+
     LLVMDisposeTargetData(target_data_ref);
 
     comp_ctx->optimize = true;
@@ -2114,7 +2145,8 @@ aot_create_comp_context(AOTCompData *comp_data, aot_comp_option_t option)
         goto fail;
     }
 
-    if (!aot_set_llvm_basic_types(&comp_ctx->basic_types, comp_ctx->context)) {
+
+    if (!aot_set_llvm_basic_types(&comp_ctx->basic_types, comp_ctx->context, pointer_alloc_AS)) {
         aot_set_last_error("create LLVM basic types failed.");
         goto fail;
     }
@@ -2536,7 +2568,7 @@ __call_llvm_intrinsic(const AOTCompContext *comp_ctx,
             aot_set_last_error("create LLVM intrinsic function type failed.");
             return NULL;
         }
-        if (!(func_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error(
                 "create LLVM intrinsic function pointer type failed.");
             return NULL;

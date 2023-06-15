@@ -470,6 +470,9 @@ load_target_info_section(const uint8 *buf, const uint8 *buf_end,
                          AOTModule *module, char *error_buf,
                          uint32 error_buf_size)
 {
+#ifdef __CHERI__
+    bool target_purecap = false;   // Whether target is purecap or not
+#endif
     AOTTargetInfo target_info;
     const uint8 *p = buf, *p_end = buf_end;
     bool is_target_little_endian, is_target_64_bit;
@@ -482,6 +485,10 @@ load_target_info_section(const uint8 *buf, const uint8 *buf_end,
     read_uint32(p, p_end, target_info.e_flags);
     read_uint32(p, p_end, target_info.reserved);
     read_byte_array(p, p_end, target_info.arch, sizeof(target_info.arch));
+
+#ifdef __CHERI__
+    target_purecap = target_info.e_flags >> 16 & 0x1 ? true : false;  // Check if we are built for purecap or hybrid on Arm
+#endif
 
     if (p != buf_end) {
         set_error_buf(error_buf, error_buf_size, "invalid section size");
@@ -501,6 +508,24 @@ load_target_info_section(const uint8 *buf, const uint8 *buf_end,
 
     /* Check target bit width */
     is_target_64_bit = target_info.bin_type & 2 ? true : false;
+
+#ifdef __CHERI__
+    uint expected_size = 4;     // 32-bit
+    if (is_target_64_bit)
+        expected_size <<= 1;     // Expect 64-bit
+
+    if (target_purecap)
+        expected_size <<= 1;     // Expect double pointer size for purecap
+
+    // Note: In the below, do not use __capability for hybrid!
+    if (expected_size != sizeof(void*))
+    {
+        set_error_buf_v(error_buf, error_buf_size,
+            "invalid target bit width expected %d bits but got %d bits",
+            expected_size << 3, sizeof(void*) << 3);
+    }
+
+#else
     if ((sizeof(void *) == 8 ? true : false) != is_target_64_bit) {
         set_error_buf_v(error_buf, error_buf_size,
                         "invalid target bit width, expected %s but got %s",
@@ -508,6 +533,7 @@ load_target_info_section(const uint8 *buf, const uint8 *buf_end,
                         is_target_64_bit ? "64-bit" : "32-bit");
         return false;
     }
+#endif
 
     /* Check target elf file type */
     if (target_info.e_type != E_TYPE_REL && target_info.e_type != E_TYPE_XIP) {
@@ -1654,6 +1680,10 @@ load_function_section(const uint8 *buf, const uint8 *buf_end, AOTModule *module,
     }
 
     for (i = 0; i < module->func_count; i++) {
+
+#if ENABLE_CHERI_PURECAP
+        read_uint64(p, p_end, text_offset);
+#else
         if (sizeof(void *) == 8) {
             read_uint64(p, p_end, text_offset);
         }
@@ -1662,6 +1692,7 @@ load_function_section(const uint8 *buf, const uint8 *buf_end, AOTModule *module,
             read_uint32(p, p_end, text_offset32);
             text_offset = text_offset32;
         }
+#endif
         if (text_offset >= module->code_size) {
             set_error_buf(error_buf, error_buf_size,
                           "invalid function code offset");
@@ -2355,6 +2386,10 @@ load_relocation_section(const uint8 *buf, const uint8 *buf_end,
         for (j = 0; j < group->relocation_count; j++, relocation++) {
             uint32 symbol_index;
 
+#if ENABLE_CHERI_PURECAP
+            read_uint64(buf, buf_end, relocation->relocation_offset);
+            read_uint64(buf, buf_end, relocation->relocation_addend);
+#else
             if (sizeof(void *) == 8) {
                 read_uint64(buf, buf_end, relocation->relocation_offset);
                 read_uint64(buf, buf_end, relocation->relocation_addend);
@@ -2366,6 +2401,7 @@ load_relocation_section(const uint8 *buf, const uint8 *buf_end,
                 read_uint32(buf, buf_end, addend32);
                 relocation->relocation_addend = (uint64)addend32;
             }
+#endif
             read_uint32(buf, buf_end, relocation->relocation_type);
             read_uint32(buf, buf_end, symbol_index);
 

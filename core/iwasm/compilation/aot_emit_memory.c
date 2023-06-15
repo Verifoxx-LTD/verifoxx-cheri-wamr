@@ -715,7 +715,7 @@ aot_compile_op_memory_grow(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
 
     if (comp_ctx->is_jit_mode) {
         /* JIT mode, call the function directly */
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add pointer type failed.");
             return false;
         }
@@ -726,7 +726,7 @@ aot_compile_op_memory_grow(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         }
     }
     else if (comp_ctx->is_indirect_mode) {
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -1009,7 +1009,7 @@ aot_compile_op_memory_copy(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
             return false;
         }
 
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function pointer type failed.");
             return false;
         }
@@ -1086,7 +1086,7 @@ aot_compile_op_memory_fill(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         return false;
     }
 
-    if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+    if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
         aot_set_last_error("create LLVM function pointer type failed.");
         return false;
     }

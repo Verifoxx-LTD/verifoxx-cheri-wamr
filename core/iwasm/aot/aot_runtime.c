@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "aot_runtime.h"
 #include "bh_log.h"
 #include "mem_alloc.h"
@@ -33,14 +37,25 @@ bh_static_assert(offsetof(WASMExecEnv, native_symbol) == 8 * sizeof(uintptr_t));
 bh_static_assert(offsetof(WASMExecEnv, native_stack_top_min)
                  == 9 * sizeof(uintptr_t));
 
+#ifdef ENABLE_CHERI_PURECAP
+// In purecap mode, there will be field alignments which need to be considered
+bh_static_assert(offsetof(AOTModuleInstance, memories) == sizeof(uintptr_t));
+bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uintptr_t));
+bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes) == 6 * sizeof(uintptr_t));
+bh_static_assert(offsetof(AOTModuleInstance, cur_exception) == 12 * sizeof(uintptr_t));
+bh_static_assert(offsetof(AOTModuleInstance, global_table_data) == 128 + 22 * sizeof(uintptr_t));
+
+#else
+
 bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes)
-                 == 6 * sizeof(uint64));
+    == 6 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, cur_exception)
-                 == 13 * sizeof(uint64));
+    == 13 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, global_table_data)
-                 == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64));
+    == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64));
+#endif
 
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
