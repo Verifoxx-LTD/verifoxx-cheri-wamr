@@ -12,7 +12,9 @@ if (NOT DEFINED WAMR_BUILD_PLATFORM)
     message(FATAL_ERROR "When using cmake on root you must define WAMR_BUILD_PLATFORM")
 endif ()
 
-if ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
+if ( (DEFINED WAMRC_TOOL) AND (WAMRC_TOOL) )
+    add_subdirectory(wamr-compiler)
+elseif ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
     add_subdirectory(product-mini/platforms/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/${WAMR_BUILD_PLATFORM})
 
     # If requested, also build native .so for test - depends on libiwasm.so so build AFTER WAMR build

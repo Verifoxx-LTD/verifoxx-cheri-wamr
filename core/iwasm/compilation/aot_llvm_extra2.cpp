@@ -4,8 +4,21 @@
  */
 
 #include <llvm-c/TargetMachine.h>
-#include <llvm/MC/TargetRegistry.h>
+
+#if defined(__has_include)
+#if __has_include("llvm/MC/TargetRegistry.h")
+#include <llvm/MC/TargetRegistry.h> // llvm-14
+#else
+#include <llvm/Support/TargetRegistry.h>    // llvm-11
+#endif /* __has_include() */
+#endif /* defined(__has_include)*/
+
 #include <llvm/Target/TargetMachine.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/IRBuilder.h>
 
 #include "bh_assert.h"
 
@@ -83,9 +96,15 @@ LLVMCreateTargetMachineWithOpts(LLVMTargetRef ctarget, const char *triple,
                                 LLVMRelocMode reloc_mode,
                                 LLVMCodeModel code_model,
                                 bool EmitStackSizeSection,
-                                const char *StackUsageOutput)
+                                const char *StackUsageOutput,
+                                const char* abi    /* NULL or ABI to set */)
 {
     llvm::TargetOptions opts;
+
+    if (abi)
+    {
+        opts.MCOptions.ABIName = abi;
+    }
 
     // -fstack-size-section equiv
     // emit it to ".stack_sizes" section in case of ELF
@@ -105,4 +124,31 @@ LLVMCreateTargetMachineWithOpts(LLVMTargetRef ctarget, const char *triple,
     auto targetmachine = target->createTargetMachine(triple, cpu, features,
                                                      opts, rm, cm, ol, jit);
     return reinterpret_cast<LLVMTargetMachineRef>(targetmachine);
+}
+
+// Return the default Program AS
+unsigned getLLVMDefaultProgramAS(LLVMTargetDataRef ref)
+{
+    return (reinterpret_cast<llvm::DataLayout *>(ref))->getProgramAddressSpace();
+}
+
+// Return the default Alloc AS
+unsigned getLLVMDefaultAllocAS(LLVMTargetDataRef ref)
+{
+    return (reinterpret_cast<llvm::DataLayout *>(ref))->getAllocaAddrSpace();
+}
+
+// Return the default globals AS
+unsigned getLLVMDefaultGlobalsAS(LLVMTargetDataRef ref)
+{
+    return (reinterpret_cast<llvm::DataLayout *>(ref))->getDefaultGlobalsAddressSpace();
+}
+
+void set_module_data_layout(LLVMTargetDataRef ref, LLVMModuleRef mod)
+{
+    llvm::Module* pmod = reinterpret_cast<llvm::Module*>(mod);
+
+    llvm::DataLayout* dl = reinterpret_cast<llvm::DataLayout*>(ref);
+    pmod->setDataLayout(*dl);
+
 }

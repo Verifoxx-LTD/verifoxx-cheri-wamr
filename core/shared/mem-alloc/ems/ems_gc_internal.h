@@ -244,10 +244,10 @@ __pragma(pack(pop));
 #endif
 #endif
 
-#ifdef ENABLE_CHERI_PURECAP
-bh_static_assert(sizeof(hmu_t) == sizeof(void *));
-bh_static_assert(sizeof(hmu_tree_node_t) == 5 * sizeof(void*));
-bh_static_assert(offsetof(hmu_tree_node_t, left) == sizeof(void *));
+#ifdef __CHERI__
+bh_static_assert(sizeof(hmu_t) == sizeof(void *__capability));
+bh_static_assert(sizeof(hmu_tree_node_t) == sizeof(void*__capability) + 4 * sizeof(void*));
+bh_static_assert(offsetof(hmu_tree_node_t, left) == sizeof(void *__capability));
 #else
 bh_static_assert(sizeof(hmu_tree_node_t) == 8 + 3 * sizeof(void *));
 bh_static_assert(offsetof(hmu_tree_node_t, left) == 4);
@@ -258,6 +258,7 @@ bh_static_assert(offsetof(hmu_tree_node_t, left) == 4);
    This avoids the potential for the compiler to not optimise the assert logic
    to a single instruction.
  */
+
 #define ASSERT_TREE_NODE_ALIGNED_ACCESS(tree_node)                              \
     do {                                                                        \
         bh_assert( cheri_is_aligned(&tree_node->left, __BIGGEST_ALIGNMENT__));  \

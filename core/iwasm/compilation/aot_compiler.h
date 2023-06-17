@@ -316,7 +316,8 @@ check_type_compatible(uint8 src_type, uint8 dst_type)
         }                                                                   \
         if (comp_ctx->is_jit_mode) {                                        \
             /* JIT mode, call the function directly */                      \
-            if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {         \
+            if (!(func_ptr_type = LLVMPointerType(func_type,                \
+                        comp_ctx->target_address_space))) {                 \
                 aot_set_last_error("llvm add pointer type failed.");        \
                 goto fail;                                                  \
             }                                                               \
@@ -328,7 +329,8 @@ check_type_compatible(uint8 src_type, uint8 dst_type)
         }                                                                   \
         else if (comp_ctx->is_indirect_mode) {                              \
             int32 func_index;                                               \
-            if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {         \
+            if (!(func_ptr_type = LLVMPointerType(func_type,                \
+                            comp_ctx->target_address_space))) {             \
                 aot_set_last_error("create LLVM function type failed.");    \
                 goto fail;                                                  \
             }                                                               \
