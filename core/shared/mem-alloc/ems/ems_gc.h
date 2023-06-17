@@ -53,14 +53,14 @@ typedef enum {
  * On CHERI platforms this must be aligned because pointers are aligned to 128-bits.
  *******************************/
 typedef struct hmu_struct {
-#if ENABLE_CHERI_PURECAP
+#ifdef __CHERI__
     gc_uint32 header __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
     gc_uint32 header;
 #endif
 } hmu_t;
 
-#if ENABLE_CHERI_PURECAP
+#ifdef __CHERI__
 #define GC_ALIGN(s) ((uint32_t)cheri_align_up( (s), __BIGGEST_ALIGNMENT__ ))
 #define GC_ALIGNMENT_SIZE   ((size_t)__BIGGEST_ALIGNMENT__)
 #else

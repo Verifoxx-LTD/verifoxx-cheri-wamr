@@ -403,6 +403,29 @@ WAMRC_LLC_COMPILER=<path/to/your/compiler/driver> ./wamrc -o test.aot test.wasm
 
 > Note: the `LLC` and `ASM` in the env name just means this compiler will be used to compile the `LLVM IR file`/`assembly file` to object file, usually passing the compiler driver is the simplest way. (e.g. for LLVM toolchain, you don't need to pass `/usr/bin/llc`, using `/usr/bin/clang` is OK)
 
+### Cross-compiling WASM to AOT on CHERI Platforms
+Provided `wamrc` has been built to link against LLVM libraries suitable for cross-compiling to the CHERI target then an AOT file for CHERI can be generated.
+Morello is the supported target, and an AOT can be built suitable for a pure-cap mode WAMR or a hybrid-cap WAMR.
+
+To generate an AOT for Morello, specific options must be passed to `wamrc` in order to configure the target.
+For pure-cap:
+``` Bash
+wamrc --target=aarch64 --target-abi=musl_purecap --cpu=rainier --cpu-features=+morello,+c64 -o test.aot test.wasm
+```
+
+For hybrid-cap:
+``` Bash
+wamrc --target=aarch64 --target-abi=gnu --cpu=rainier --cpu-features=+morello -o test.aot test.wasm
+```
+
+Note:
+1. The feature *+morello* is required, and for pure-cap *+c64* is also required
+2. As well as *musl_purecap*, *gnu_purecap*, *cheri_purecap* and *purecap* are also valid pure-cap target ABIs
+3. If *c64* is specified, the ABI must contain the string *purecap*
+4. The CPU is not explicitly required, but *rainier* is the closest match
+5. If the *morello* feature is enabled, then the target triple string is built as *aarch64-unknown-linux-<ABI>* for example *aarch64-unknown-linux-musl_purecap*
+
+
 Run WASM app in WAMR mini product build
 =======================================
 

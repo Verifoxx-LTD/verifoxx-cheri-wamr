@@ -110,7 +110,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
         "WAMR_BUILD_PLATFORM": "linux",
-        "WAMR_BUILD_AOT": "0",
+        "WAMR_BUILD_AOT": "1",
         "WAMR_BUILD_LIBC_BUILTIN": "1",
         "WAMR_BUILD_FAST_INTERP": "1",
         "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
