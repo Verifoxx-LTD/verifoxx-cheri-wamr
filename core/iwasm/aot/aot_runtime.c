@@ -47,6 +47,7 @@ bh_static_assert(offsetof(AOTModuleInstance, global_table_data) == 128 + 22 * si
 
 #else
 
+#if 0
 bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes)
@@ -55,8 +56,18 @@ bh_static_assert(offsetof(AOTModuleInstance, cur_exception)
     == 13 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, global_table_data)
     == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64));
-#endif
+#else
+bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes)
+    == 6 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, cur_exception)
+    == 12 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, global_table_data)
+    == 128 + 22 * 2 * sizeof(uint64));
 
+#endif
+#endif
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {

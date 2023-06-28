@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "aot_reloc.h"
 
 #define R_AARCH64_MOVW_UABS_G0 263
@@ -32,6 +36,31 @@
 
 #define R_AARCH64_JUMP26 282
 #define R_AARCH64_CALL26 283
+
+/* Morello ELF additions */
+#ifdef __CHERI__
+//#define R_MORELLO_TSTBR14 0xe000
+//#define R_MORELLO_CONDBR19 0xe001
+
+#define R_MORELLO_JUMP26 0xe002
+#define R_MORELLO_CALL26 0xe003
+
+//#define R_MORELLO_LD_PREL_LO17 0xe004
+
+#define R_MORELLO_ADR_PREL_PG_HI20 0xe005
+#define R_MORELLO_ADR_PREL_PG_HI20_NC 0xe006
+
+//#define R_MORELLO_ADR_GOT_PAGE 0xe007
+//#define R_MORELLO_LD128_GOT_LO12_NC 0xe008
+
+#define R_MORELLO_MOVW_SIZE_G0 0xe009
+#define R_MORELLO_MOVW_SIZE_G0_NC 0xe00a
+#define R_MORELLO_MOVW_SIZE_G1 0xe00b
+#define R_MORELLO_MOVW_SIZE_G1_NC 0xe00c
+#define R_MORELLO_MOVW_SIZE_G2 0xe00d
+#define R_MORELLO_MOVW_SIZE_G2_NC 0xe00f
+#define R_MORELLO_MOVW_SIZE_G3 0xe010
+#endif
 
 /* clang-format off */
 static SymbolMap target_sym_map[] = {
@@ -80,6 +109,44 @@ get_current_target(char *target_buf, uint32 target_buf_size)
 }
 #undef BUILD_TARGET_AARCH64_DEFAULT
 
+#if ENABLE_CHERI_PURECAP
+static uint32
+get_plt_item_size()
+{
+    /* 8*4 bytes instructions and 16 bytes symbol address */
+    return 16 + 8*4;
+}
+
+void
+init_plt_table(uint8* plt)
+{
+/*
+    asm("stp  c16, c30, [csp, #-32]!\n"
+        "adr  c30, #28\n"
+        "ldr  c16, [c30]\n" :::);
+        */
+    uint32 i, num = sizeof(target_sym_map) / sizeof(SymbolMap);
+    for (i = 0; i < num; i++) {
+        uint32* p = (uint32*)plt;
+        *p++ = 0x62bf7bf0; /* stp  c16, c30, [csp, #-32]! */
+        *p++ = 0x100000fe; /* adr  c30, #28; symbol addr is PC + 7 instructions
+                              below */
+        *p++ = 0xc24003d0; /* ldr  c16, [c30]   */
+        *p++ = 0xc2c23200; /* blr  c16          */
+        *p++ = 0x22c17bf0; /* ldp  c16, c30, [sp], #32  */
+        *p++ = 0xc2c213c0; /* br   c30          */
+
+        *p++ = 0xd503201f; /* nop */
+        *p++ = 0xd503201f; /* nop */
+
+        /* symbol addr */
+        *((void **)p) = target_sym_map[i].symbol_addr;   // Will be relative to PCC when execute;
+
+        p += 4;
+        plt += get_plt_item_size();
+    }
+}
+#else
 static uint32
 get_plt_item_size()
 {
@@ -90,6 +157,7 @@ get_plt_item_size()
 void
 init_plt_table(uint8 *plt)
 {
+
     uint32 i, num = sizeof(target_sym_map) / sizeof(SymbolMap);
     for (i = 0; i < num; i++) {
         uint32 *p = (uint32 *)plt;
@@ -106,6 +174,7 @@ init_plt_table(uint8 *plt)
         plt += get_plt_item_size();
     }
 }
+#endif
 
 uint32
 get_plt_table_size()
@@ -142,6 +211,11 @@ apply_relocation(AOTModule *module, uint8 *target_section_addr,
                  int32 symbol_index, char *error_buf, uint32 error_buf_size)
 {
     switch (reloc_type) {
+
+#ifdef __CHERI__
+        case R_MORELLO_CALL26:
+        case R_MORELLO_JUMP26:
+#endif
         case R_AARCH64_CALL26:
         case R_AARCH64_JUMP26:
         {
