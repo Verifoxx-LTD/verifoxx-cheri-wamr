@@ -80,7 +80,7 @@ bh_static_assert(offsetof(WASMMemoryInstance, heap_handle) == 32 + 4 * 2 * sizeo
     #endif
 
 
-#elif (AOT_CHERI_PTR_SIZE <= 8) || (AOT_CHERI_PTR_SIZE == 0)
+#elif AOT_CHERI_PTR_SIZE <= 8 /* Includes when AOT_CHERI_PTR_SIZE == 0 i.e not defined */
 // Either 64-bit CHERI alignment or cheri alignment not defined which gives minimum of 8 byte ptr align
 bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uint64));
@@ -1241,7 +1241,7 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
 #if ENABLE_CHERI_PURECAP
     // Align up the position of the tables, made space for it previously
     p = cheri_align_up(p, __BIGGEST_ALIGNMENT__);
-#else AOT_CHERI_PTR_SIZE
+#elif AOT_CHERI_PTR_SIZE
     p = (uint8*)cheri_align_up(p, (uint8*)AOT_CHERI_PTR_SIZE);
 #endif
     module_inst->table_count = module->table_count + module->import_table_count;
