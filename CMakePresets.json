@@ -29,7 +29,8 @@
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_APP": "0",
-        "WAMR_BUILD_NATIVE_TEST_LIB": "1"
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1",
+        "WAMR_BUILD_AOT_CHERI_PTR": "16"
       },
       "condition": {
         "type": "equals",
@@ -68,7 +69,8 @@
       "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
         "CHERI_PURECAP": "1",
-        "MORELLO_PURECAP_LIBS_FOLDER": "/purecap-lib"
+        "MORELLO_PURECAP_LIBS_FOLDER": "/purecap-lib",
+        "WAMR_BUILD_AOT_CHERI_PTR": "0"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -119,7 +121,8 @@
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_APP": "0",
-        "WAMR_BUILD_NATIVE_TEST_LIB": "1"
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1",
+        "WAMR_BUILD_AOT_CHERI_PTR": "16"
       },
       "condition": {
         "type": "equals",
@@ -184,7 +187,8 @@
         "WAMR_BUILD_SIMD": "0",
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_APP": "0",
-        "WAMR_BUILD_NATIVE_TEST_LIB": "0"
+        "WAMR_BUILD_NATIVE_TEST_LIB": "0",
+        "WAMR_BUILD_AOT_CHERI_PTR":  "16"
       },
       "condition": {
         "type": "equals",

@@ -37,17 +37,51 @@ bh_static_assert(offsetof(WASMExecEnv, native_symbol) == 8 * sizeof(uintptr_t));
 bh_static_assert(offsetof(WASMExecEnv, native_stack_top_min)
                  == 9 * sizeof(uintptr_t));
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
 // In purecap mode, there will be field alignments which need to be considered
-bh_static_assert(offsetof(AOTModuleInstance, memories) == sizeof(uintptr_t));
+bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * sizeof(uintptr_t));
 bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uintptr_t));
 bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes) == 6 * sizeof(uintptr_t));
 bh_static_assert(offsetof(AOTModuleInstance, cur_exception) == 12 * sizeof(uintptr_t));
 bh_static_assert(offsetof(AOTModuleInstance, global_table_data) == 128 + 22 * sizeof(uintptr_t));
 
-#else
+bh_static_assert(offsetof(WASMMemoryInstance, memory_data) == 32);
+bh_static_assert(offsetof(WASMMemoryInstance, heap_handle) == 32 + 4 * sizeof(uintptr_t));
 
-#if 0
+    #if WASM_ENABLE_FAST_JIT != 0 || WASM_ENABLE_JIT != 0 \
+            || WASM_ENABLE_WAMR_COMPILER != 0 || WASM_ENABLE_AOT != 0
+    bh_static_assert(offsetof(WASMMemoryInstance, mem_bound_check_16bytes)
+                 == 32 + 5 * sizeof(uintptr_t) + 4 * sizeof(uint64));
+    bh_static_assert(sizeof(AOTModuleInstance)
+                 == 128 + 22 * sizeof(uintptr_t) + 32 + 5 * sizeof(uintptr_t) + (5+1) * sizeof(uint64));
+    #else
+    bh_static_assert(sizeof(AOTModuleInstance)
+                 == 128 + 22 * sizeof(uintptr_t) + 32 + 5 * sizeof(uintptr_t));
+    #endif
+
+#elif AOT_CHERI_PTR_SIZE == 16
+bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes) == 6 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, cur_exception) == 12 * 2 * sizeof(uint64));
+bh_static_assert(offsetof(AOTModuleInstance, global_table_data) == 128 + 22 * 2 * sizeof(uint64));
+
+bh_static_assert(offsetof(WASMMemoryInstance, memory_data) == 32);
+bh_static_assert(offsetof(WASMMemoryInstance, heap_handle) == 32 + 4 * 2 * sizeof(uint64));
+
+    #if WASM_ENABLE_FAST_JIT != 0 || WASM_ENABLE_JIT != 0 \
+            || WASM_ENABLE_WAMR_COMPILER != 0 || WASM_ENABLE_AOT != 0
+    bh_static_assert(offsetof(WASMMemoryInstance, mem_bound_check_16bytes) == 32 + 5 * 2 * sizeof(uint64) + 4 * sizeof(uint64));
+    bh_static_assert(sizeof(AOTModuleInstance)
+                == 128 + 22 * 2 * sizeof(uintptr_t) + 32 + 5 * 2 * sizeof(uint64) + (5+1)*sizeof(uint64));
+    #else
+    bh_static_assert(sizeof(AOTModuleInstance)
+                == 128 + 22 * 2 * sizeof(uintptr_t) + 16 + 5 * 2 * sizeof(uintptr_t));
+    #endif
+
+
+#elif (AOT_CHERI_PTR_SIZE <= 8) || (AOT_CHERI_PTR_SIZE == 0)
+// Either 64-bit CHERI alignment or cheri alignment not defined which gives minimum of 8 byte ptr align
 bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes)
@@ -56,18 +90,25 @@ bh_static_assert(offsetof(AOTModuleInstance, cur_exception)
     == 13 * sizeof(uint64));
 bh_static_assert(offsetof(AOTModuleInstance, global_table_data)
     == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64));
-#else
-bh_static_assert(offsetof(AOTModuleInstance, memories) == 1 * 2 * sizeof(uint64));
-bh_static_assert(offsetof(AOTModuleInstance, func_ptrs) == 5 * 2 * sizeof(uint64));
-bh_static_assert(offsetof(AOTModuleInstance, func_type_indexes)
-    == 6 * 2 * sizeof(uint64));
-bh_static_assert(offsetof(AOTModuleInstance, cur_exception)
-    == 12 * 2 * sizeof(uint64));
-bh_static_assert(offsetof(AOTModuleInstance, global_table_data)
-    == 128 + 22 * 2 * sizeof(uint64));
 
+bh_static_assert(offsetof(WASMMemoryInstance, memory_data) == 24);
+bh_static_assert(offsetof(WASMMemoryInstance, heap_handle) == 24 + 4 * sizeof(uint64));
+
+    #if WASM_ENABLE_FAST_JIT != 0 || WASM_ENABLE_JIT != 0 \
+            || WASM_ENABLE_WAMR_COMPILER != 0 || WASM_ENABLE_AOT != 0
+    bh_static_assert(offsetof(WASMMemoryInstance, mem_bound_check_16bytes) == 24 + 9 * sizeof(uint64));
+    bh_static_assert(sizeof(AOTModuleInstance)
+        == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64) + 24 + 10 * sizeof(uint64));
+    #else
+    bh_static_assert(sizeof(AOTModuleInstance)
+        == 13 * sizeof(uint64) + 128 + 11 * sizeof(uint64) + 24 + 5 * sizeof(uint64));
+    #endif
+
+#else
+#error Invalid setting for AOT_CHERI_PTR_SIZE
 #endif
-#endif
+
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -1152,8 +1193,20 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
     total_size += table_size;
 
     /* The offset of AOTModuleInstanceExtra, make it 8-byte aligned */
+#if ENABLE_CHERI_PURECAP
+    // On CHERI purecap, add space for alignment after memory_instance, globals and table and align up the final
+    // result ahead of WASMModuleInstanceExtra
+    total_size += __BIGGEST_ALIGNMENT__ * 3;
+    total_size = cheri_align_up(total_size, __BIGGEST_ALIGNMENT__);    // 16 bytes aligned on CHERI
+#elif AOT_CHERI_PTR_SIZE
+    // If built for a CHERI architecture, but not running on one, we still
+    // need to align up the pointers
+    total_size += AOT_CHERI_PTR_SIZE * 3;
+    total_size = (uint64)cheri_align_up(total_size, AOT_CHERI_PTR_SIZE);
+#else
     total_size = (total_size + 7LL) & ~7LL;
-    extra_info_offset = (uint32)total_size;
+#endif
+    extra_info_offset = (uint32)total_size; // Now appropriately aligned
     total_size += sizeof(AOTModuleInstanceExtra);
 
     /* Allocate module instance, global data, table data and heap data */
@@ -1170,6 +1223,13 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
     /* Initialize global info */
     p = (uint8 *)module_inst + module_inst_struct_size
         + module_inst_mem_inst_size;
+
+#if ENABLE_CHERI_PURECAP
+    // Align up the global data start, made space for it previously
+    p = cheri_align_up(p, __BIGGEST_ALIGNMENT__);
+#elif AOT_CHERI_PTR_SIZE
+    p = (uint8*)cheri_align_up(p, (uint8*)AOT_CHERI_PTR_SIZE);
+#endif
     module_inst->global_data = p;
     module_inst->global_data_size = module->global_data_size;
     if (!global_instantiate(module_inst, module, error_buf, error_buf_size))
@@ -1177,6 +1237,13 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
 
     /* Initialize table info */
     p += module->global_data_size;
+
+#if ENABLE_CHERI_PURECAP
+    // Align up the position of the tables, made space for it previously
+    p = cheri_align_up(p, __BIGGEST_ALIGNMENT__);
+#else AOT_CHERI_PTR_SIZE
+    p = (uint8*)cheri_align_up(p, (uint8*)AOT_CHERI_PTR_SIZE);
+#endif
     module_inst->table_count = module->table_count + module->import_table_count;
     if (!tables_instantiate(module_inst, module, (AOTTableInstance *)p,
                             error_buf, error_buf_size))

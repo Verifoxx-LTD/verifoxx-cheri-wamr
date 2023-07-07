@@ -9,6 +9,10 @@ if (CHERI_PURECAP)
     add_compile_definitions(ENABLE_CHERI_PURECAP=1)
 endif ()
 
+if (DEFINED WAMR_BUILD_AOT_CHERI_PTR AND WAMR_BUILD_AOT_CHERI_PTR GREATER 0)
+    # Force use of CHERI pointer with given alignment
+    add_compile_definitions(AOT_CHERI_PTR_SIZE=${WAMR_BUILD_AOT_CHERI_PTR})
+endif ()
 
 include_directories(${PLATFORM_SHARED_DIR})
 include_directories(${PLATFORM_SHARED_DIR}/../include)

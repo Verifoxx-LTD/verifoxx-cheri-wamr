@@ -446,4 +446,8 @@
 #define WASM_ENABLE_WASM_CACHE 0
 #endif
 
+#ifndef AOT_CHERI_PTR_SIZE
+#define AOT_CHERI_PTR_SIZE 0
+#endif
+
 #endif /* end of _CONFIG_H_ */

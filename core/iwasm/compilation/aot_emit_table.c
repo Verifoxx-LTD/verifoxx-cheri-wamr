@@ -15,10 +15,24 @@ get_tbl_inst_offset(const AOTCompContext *comp_ctx,
     AOTImportTable *imp_tbls = comp_ctx->comp_data->import_tables;
     AOTTable *tbls = comp_ctx->comp_data->tables;
 
+#if AOT_CHERI_PTR_SIZE
+    // Need to align up the offset on a CHERI supported built to match corresponding runtime struct
+    offset = cheri_align_up(
+        offsetof(AOTModuleInstance, global_table_data.bytes)
+        + (uint64)comp_ctx->comp_data->memory_count * sizeof(AOTMemoryInstance), (uint64_t)AOT_CHERI_PTR_SIZE);
+
+    offset += comp_ctx->comp_data->global_data_size;
+
+    // And align up again
+    offset = cheri_align_up(offset, (uint64_t)AOT_CHERI_PTR_SIZE);
+
+#else
     offset =
         offsetof(AOTModuleInstance, global_table_data.bytes)
         + (uint64)comp_ctx->comp_data->memory_count * sizeof(AOTMemoryInstance)
         + comp_ctx->comp_data->global_data_size;
+
+#endif
 
     while (i < tbl_idx && i < comp_ctx->comp_data->import_table_count) {
         offset += offsetof(AOTTableInstance, elems);

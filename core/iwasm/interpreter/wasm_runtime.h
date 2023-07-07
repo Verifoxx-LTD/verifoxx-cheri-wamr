@@ -11,6 +11,24 @@
 #include "../common/wasm_runtime_common.h"
 #include "../common/wasm_exec_env.h"
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#else
+
+// We need cheri_align_up(), implement if not running on CHERI
+#if defined __has_builtin
+    #if __has_builtin(__builtin_align_up)
+    #define cheri_align_up(val, align) __builtin_align_up((val), (align))
+    #endif
+#endif
+#ifndef cheri_align_up
+// Define it here since one of the macros wasn't available
+#define cheri_align_up(val, align)  \
+    ( ((uintptr_t)(val) + (uintptr_t)(align) - (uintptr_t)1) & ~((uintptr_t)(align) - (uintptr_t)1) )
+
+#endif
+#endif /* if __CHERI__ */
+
 #if WASM_ENABLE_WASI_NN != 0
 #include "../libraries/wasi-nn/src/wasi_nn_private.h"
 #endif
@@ -27,6 +45,34 @@ typedef struct WASMMemoryInstance WASMMemoryInstance;
 typedef struct WASMTableInstance WASMTableInstance;
 typedef struct WASMGlobalInstance WASMGlobalInstance;
 
+/** Support AOT cross-compiling for CHERI platforms.
+* When cross-compiling to run on a CHERI pure-cap enabled platform the 
+* native pointer size will not match the run time target, therefore we
+* need to align and pad all pointers as necessary to ensure structure
+* layouts will match.
+* 
+* AOT_CHERI_PTR_SIZE must be a multiple of the natural pointer size on
+* the compiling machine.
+* 
+* NOTE: To support compiling for a runtime on non-CHERI platforms we can keep needed
+* alignments, so long as the alignments are the same at build vs runtime
+*/
+#if AOT_CHERI_PTR_SIZE
+#define AOT_CHERI_ALIGN __attribute__((aligned(AOT_CHERI_PTR_SIZE)))
+#define AOT_CHERI_PAD_SIZE  (AOT_CHERI_PTR_SIZE - sizeof(void *)) 
+
+bh_static_assert(AOT_CHERI_PTR_SIZE % sizeof(void*) == 0);
+bh_static_assert(AOT_CHERI_PAD_SIZE >= 0);
+
+#else
+#define AOT_CHERI_ALIGN
+#define AOT_CHERI_PAD_SIZE 0
+#endif
+
+#define PointerWrap(type, field) \
+    type field AOT_CHERI_ALIGN; \
+    uint8 field##_padding[AOT_CHERI_PAD_SIZE];
+
 /**
  * When LLVM JIT, WAMR compiler or AOT is enabled, we should ensure that
  * some offsets of the same field in the interpreter module instance and
@@ -37,14 +83,15 @@ typedef struct WASMGlobalInstance WASMGlobalInstance;
  */
 #if (WASM_ENABLE_JIT != 0 || WASM_ENABLE_WAMR_COMPILER != 0 \
      || WASM_ENABLE_AOT != 0)                               \
-    && UINTPTR_MAX == UINT32_MAX
+    && UINTPTR_MAX == UINT32_MAX                            \
+    && AOT_CHERI_PTR_SIZE <= 32         /* If AOT_CHERI_PTR_SIZE defined and > 32 then add the additional padding */
 /* Add u32 padding if LLVM JIT, WAMR compiler or AOT is enabled on
    32-bit platform */
 #define DefPointer(type, field) \
     type field;                 \
-    uint32 field##_padding
+    uint32 field##_padding;
 #else
-#define DefPointer(type, field) type field
+#define DefPointer  PointerWrap
 #endif
 
 typedef enum WASMExceptionID {
@@ -75,7 +122,6 @@ typedef union {
     uint32 u32[2];
 } MemBound;
 
-#if ENABLE_CHERI_PURECAP
 struct WASMMemoryInstance
 {
     /* Module type */
@@ -117,51 +163,6 @@ struct WASMMemoryInstance
     MemBound mem_bound_check_16bytes;
 #endif
 };
-#else
-struct WASMMemoryInstance
-{
-    /* Module type */
-    uint32 module_type;
-    /* Shared memory flag */
-    bool is_shared;
-
-    /* Number bytes per page */
-    uint32 num_bytes_per_page;
-    /* Current page count */
-    uint32 cur_page_count;
-    /* Maximum page count */
-    uint32 max_page_count;
-    /* Memory data size */
-    uint32 memory_data_size;
-    /**
-     * Memory data begin address, Note:
-     *   the app-heap might be inserted in to the linear memory,
-     *   when memory is re-allocated, the heap data and memory data
-     *   must be copied to new memory also
-     */
-    DefPointer(uint8*, memory_data) __attribute__((aligned(16)));
-    /* Memory data end address */
-    DefPointer(uint8*, memory_data_end) __attribute__((aligned(16)));
-
-    /* Heap data base address */
-    DefPointer(uint8*, heap_data) __attribute__((aligned(16)));
-    /* Heap data end address */
-    DefPointer(uint8*, heap_data_end) __attribute__((aligned(16)));
-    /* The heap created */
-    DefPointer(void*, heap_handle) __attribute__((aligned(16)));
-
-#if WASM_ENABLE_FAST_JIT != 0 || WASM_ENABLE_JIT != 0 \
-    || WASM_ENABLE_WAMR_COMPILER != 0 || WASM_ENABLE_AOT != 0
-    MemBound mem_bound_check_1byte;
-    MemBound mem_bound_check_2bytes;
-    MemBound mem_bound_check_4bytes;
-    MemBound mem_bound_check_8bytes;
-    MemBound mem_bound_check_16bytes;
-#endif
-};
-#endif
-
-
 
 struct WASMTableInstance {
     /* Current size */
@@ -296,7 +297,6 @@ typedef struct WASMModuleInstanceExtra {
 
 struct AOTFuncPerfProfInfo;
 
-#if ENABLE_CHERI_PURECAP
 struct WASMModuleInstance {
     /* Module instance type, for module instance loaded from
        WASM bytecode binary, this field is Wasm_Module_Bytecode;
@@ -306,65 +306,65 @@ struct WASMModuleInstance {
     uint32 module_type;
 
     uint32 memory_count;
-    DefPointer(WASMMemoryInstance **, memories);
+    DefPointer(WASMMemoryInstance**, memories);
 
     /* global and table info */
     uint32 global_data_size;
     uint32 table_count;
-    DefPointer(uint8 *, global_data);
+    DefPointer(uint8*, global_data);
     /* For AOTModuleInstance, it denotes `AOTTableInstance *` */
-    DefPointer(WASMTableInstance **, tables);
+    DefPointer(WASMTableInstance**, tables);
 
     /* import func ptrs + llvm jit func ptrs */
-    DefPointer(void **, func_ptrs);
+    DefPointer(void**, func_ptrs);
 
     /* function type indexes */
-    DefPointer(uint32 *, func_type_indexes);
+    DefPointer(uint32*, func_type_indexes);
 
     uint32 export_func_count;
     uint32 export_global_count;
     uint32 export_memory_count;
     uint32 export_table_count;
     /* For AOTModuleInstance, it denotes `AOTFunctionInstance *` */
-    DefPointer(WASMExportFuncInstance *, export_functions);
-    DefPointer(WASMExportGlobInstance *, export_globals);
-    DefPointer(WASMExportMemInstance *, export_memories);
-    DefPointer(WASMExportTabInstance *, export_tables);
+    DefPointer(WASMExportFuncInstance*, export_functions);
+    DefPointer(WASMExportGlobInstance*, export_globals);
+    DefPointer(WASMExportMemInstance*, export_memories);
+    DefPointer(WASMExportTabInstance*, export_tables);
 
     /* The exception buffer of wasm interpreter for current thread. */
     char cur_exception[EXCEPTION_BUF_LEN];
 
     /* The WASM module or AOT module, for AOTModuleInstance,
        it denotes `AOTModule *` */
-    DefPointer(WASMModule *, module);
+    DefPointer(WASMModule*, module);
 
 #if WASM_ENABLE_LIBC_WASI
     /* WASI context */
-    DefPointer(WASIContext *, wasi_ctx);
+    DefPointer(WASIContext*, wasi_ctx);
 #else
-    DefPointer(void *, wasi_ctx);
+    DefPointer(void*, wasi_ctx);
 #endif
-    DefPointer(WASMExecEnv *, exec_env_singleton);
+    DefPointer(WASMExecEnv*, exec_env_singleton);
     /* Array of function pointers to import functions,
        not available in AOTModuleInstance */
-    DefPointer(void **, import_func_ptrs);
+    DefPointer(void**, import_func_ptrs);
     /* Array of function pointers to fast jit functions,
        not available in AOTModuleInstance:
        Only when the multi-tier JIT macros are all enabled and the running
        mode of current module instance is set to Mode_Fast_JIT, runtime
        will allocate new memory for it, otherwise it always points to the
        module->fast_jit_func_ptrs */
-    DefPointer(void **, fast_jit_func_ptrs);
+    DefPointer(void**, fast_jit_func_ptrs);
     /* The custom data that can be set/get by wasm_{get|set}_custom_data */
-    DefPointer(void *, custom_data);
+    DefPointer(void*, custom_data);
     /* Stack frames, used in call stack dump and perf profiling */
-    DefPointer(Vector *, frames);
+    DefPointer(Vector*, frames);
     /* Function performance profiling info list, only available
        in AOTModuleInstance */
-    DefPointer(struct AOTFuncPerfProfInfo *, func_perf_profilings);
+    DefPointer(struct AOTFuncPerfProfInfo*, func_perf_profilings);
     /* WASM/AOT module extra info, for AOTModuleInstance,
        it denotes `AOTModuleInstanceExtra *` */
-    DefPointer(WASMModuleInstanceExtra *, e);
+    DefPointer(WASMModuleInstanceExtra*, e);
 
     /* Default WASM operand stack size */
     uint32 default_wasm_stack_size;
@@ -382,125 +382,17 @@ struct WASMModuleInstance {
      * +------------------------------+
      */
     union {
-#if __CHERI__
+#if AOT_CHERI_PTR_SIZE
+        uint8_t _make_it_cheri_aligned_[AOT_CHERI_PTR_SIZE];
+#elif __CHERI__
         uintptr_t _make_it_16_byte_aligned_;
 #else
         uint64 _make_it_8_byte_aligned_;
 #endif
-        WASMMemoryInstance memory_instances[1];
-        uint8 bytes[1];
-    } global_table_data;
-};
-#else
-struct WASMModuleInstance {
-    /* Module instance type, for module instance loaded from
-       WASM bytecode binary, this field is Wasm_Module_Bytecode;
-       for module instance loaded from AOT file, this field is
-       Wasm_Module_AoT, and this structure should be treated as
-       AOTModuleInstance structure. */
-    uint32 module_type;
-
-    uint32 memory_count;
-    uint64 pad1;
-    DefPointer(WASMMemoryInstance**, memories) __attribute__((aligned(16)));
-    uint64 pad2;
-
-    /* global and table info */
-    uint32 global_data_size;
-    uint32 table_count;
-    uint64 pad3;
-    DefPointer(uint8*, global_data) __attribute__((aligned(16)));
-    uint64 pad4;
-    /* For AOTModuleInstance, it denotes `AOTTableInstance *` */
-    DefPointer(WASMTableInstance**, tables) __attribute__((aligned(16)));
-    uint64 pad5;
-    /* import func ptrs + llvm jit func ptrs */
-    DefPointer(void**, func_ptrs) __attribute__((aligned(16)));
-    uint64 pad6;
-    /* function type indexes */
-    DefPointer(uint32*, func_type_indexes) __attribute__((aligned(16)));
-    uint64 pad7;
-    uint32 export_func_count;
-    uint32 export_global_count;
-    uint32 export_memory_count;
-    uint32 export_table_count;
-    /* For AOTModuleInstance, it denotes `AOTFunctionInstance *` */
-    DefPointer(WASMExportFuncInstance*, export_functions) __attribute__((aligned(16)));
-    uint64 pad8;
-    DefPointer(WASMExportGlobInstance*, export_globals) __attribute__((aligned(16)));
-    uint64 pad9;
-    DefPointer(WASMExportMemInstance*, export_memories) __attribute__((aligned(16)));
-    uint64 pad10;
-    DefPointer(WASMExportTabInstance*, export_tables) __attribute__((aligned(16)));
-    uint64 pad11;
-    /* The exception buffer of wasm interpreter for current thread. */
-    char cur_exception[EXCEPTION_BUF_LEN] __attribute__((aligned(16)));
-
-    /* The WASM module or AOT module, for AOTModuleInstance,
-       it denotes `AOTModule *` */
-    DefPointer(WASMModule*, module) __attribute__((aligned(16)));
-    uint64 pad12;
-#if WASM_ENABLE_LIBC_WASI
-    /* WASI context */
-    DefPointer(WASIContext*, wasi_ctx) __attribute__((aligned(16)));
-    uint64 pad13;
-#else
-    DefPointer(void*, wasi_ctx);
-    uint64 pad13;
-#endif
-    DefPointer(WASMExecEnv*, exec_env_singleton) __attribute__((aligned(16)));
-    uint64 pad14;
-    /* Array of function pointers to import functions,
-       not available in AOTModuleInstance */
-    DefPointer(void**, import_func_ptrs) __attribute__((aligned(16)));
-    /* Array of function pointers to fast jit functions,
-       not available in AOTModuleInstance:
-       Only when the multi-tier JIT macros are all enabled and the running
-       mode of current module instance is set to Mode_Fast_JIT, runtime
-       will allocate new memory for it, otherwise it always points to the
-       module->fast_jit_func_ptrs */
-    uint64 pad15;
-    DefPointer(void**, fast_jit_func_ptrs) __attribute__((aligned(16)));
-    uint64 pad16;
-    /* The custom data that can be set/get by wasm_{get|set}_custom_data */
-    DefPointer(void*, custom_data) __attribute__((aligned(16)));
-    uint64 pad17;
-    /* Stack frames, used in call stack dump and perf profiling */
-    DefPointer(Vector*, frames) __attribute__((aligned(16)));
-    uint64 pad18;
-    /* Function performance profiling info list, only available
-       in AOTModuleInstance */
-    DefPointer(struct AOTFuncPerfProfInfo*, func_perf_profilings) __attribute__((aligned(16)));
-    uint64 pad19;
-    /* WASM/AOT module extra info, for AOTModuleInstance,
-       it denotes `AOTModuleInstanceExtra *` */
-    DefPointer(WASMModuleInstanceExtra*, e) __attribute__((aligned(16)));
-    uint64 pad20;
-    /* Default WASM operand stack size */
-    uint32 default_wasm_stack_size;
-    uint32 reserved[3];
-
-    /*
-     * +------------------------------+ <-- memories
-     * | WASMMemoryInstance[mem_count], mem_count is always 1 for LLVM JIT/AOT
-     * +------------------------------+ <-- global_data
-     * | global data
-     * +------------------------------+ <-- tables
-     * | WASMTableInstance[table_count]
-     * +------------------------------+ <-- e
-     * | WASMModuleInstanceExtra
-     * +------------------------------+
-     */
-    union {
-        uint64_t _make_it_16_byte_aligned_[2];
-        WASMMemoryInstance memory_instances[1];
-        uint64 pad21;
-        uint8 bytes[1] __attribute__((aligned(16)));
-    } global_table_data;
-} __attribute__((aligned(16)));
-
-#endif
-
+        WASMMemoryInstance memory_instances[1] AOT_CHERI_ALIGN;
+        uint8 bytes[1] AOT_CHERI_ALIGN;
+    } global_table_data AOT_CHERI_ALIGN;
+} AOT_CHERI_ALIGN;
 
 struct WASMInterpFrame;
 typedef struct WASMInterpFrame WASMRuntimeFrame;

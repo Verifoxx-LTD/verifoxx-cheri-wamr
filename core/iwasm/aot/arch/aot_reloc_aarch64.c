@@ -37,29 +37,13 @@
 #define R_AARCH64_JUMP26 282
 #define R_AARCH64_CALL26 283
 
-/* Morello ELF additions */
+/* Morello ELF additions which are required */
 #ifdef __CHERI__
-//#define R_MORELLO_TSTBR14 0xe000
-//#define R_MORELLO_CONDBR19 0xe001
-
 #define R_MORELLO_JUMP26 0xe002
 #define R_MORELLO_CALL26 0xe003
 
-//#define R_MORELLO_LD_PREL_LO17 0xe004
-
 #define R_MORELLO_ADR_PREL_PG_HI20 0xe005
 #define R_MORELLO_ADR_PREL_PG_HI20_NC 0xe006
-
-//#define R_MORELLO_ADR_GOT_PAGE 0xe007
-//#define R_MORELLO_LD128_GOT_LO12_NC 0xe008
-
-#define R_MORELLO_MOVW_SIZE_G0 0xe009
-#define R_MORELLO_MOVW_SIZE_G0_NC 0xe00a
-#define R_MORELLO_MOVW_SIZE_G1 0xe00b
-#define R_MORELLO_MOVW_SIZE_G1_NC 0xe00c
-#define R_MORELLO_MOVW_SIZE_G2 0xe00d
-#define R_MORELLO_MOVW_SIZE_G2_NC 0xe00f
-#define R_MORELLO_MOVW_SIZE_G3 0xe010
 #endif
 
 /* clang-format off */
@@ -459,6 +443,52 @@ apply_relocation(AOTModule *module, uint8 *target_section_addr,
             }
             break;
         }
+
+#ifdef __CHERI__
+        case R_MORELLO_ADR_PREL_PG_HI20:
+        case R_MORELLO_ADR_PREL_PG_HI20_NC:
+        {
+            void* S = symbol_addr,
+                * P = (void*)(target_section_addr + reloc_offset);
+            int64 X, A, initial_addend;
+            int32 insn, immhi18, immlo2, imm20;
+
+            CHECK_RELOC_OFFSET(sizeof(int32));
+
+            insn = *(int32*)P;
+            immhi18 = (insn >> 5) & 0x3FFFF;    // Recover immHi 
+            immlo2 = (insn >> 29) & 0x3;        // Recover immLo
+            imm20 = (immhi18 << 2) | immlo2;    // Build full value
+
+            // If bit 23 is 1 then sign extend, else zero extend
+            if ((insn >> 23) & 0x1)
+            {
+                SIGN_EXTEND_TO_INT64(imm20 << 12, 32, initial_addend);  // Final value is bits 31:12
+            }
+            else
+            {
+                initial_addend = imm20 << 12;
+            }
+
+            A = initial_addend;
+            A += (int64)reloc_addend;
+
+            /* Page(S+A) - Page(P) */
+            X = Page((int64)S + A) - Page((int64)P);
+
+            /* Check overflow for R_MORELLO_ADR_PREL_PG_HI20 only: 2**-31 <= X < 2**31 */
+            if (reloc_type == R_MORELLO_ADR_PREL_PG_HI20
+                && (X >= ((int64)2 * BH_GB) || X < ((int64)-2 * BH_GB)))
+                goto overflow_check_fail;
+
+            /* write the imm20 back to instruction */
+            immhi18 = (int32)( (X >> (12+2)) & 0x3FFFF );
+            immlo2 = (int32)( (X >> 12) & 0x3);
+            *(int32*)P = (insn & 0x9F80001F) | (immlo2 << 29) | (immhi18 << 5); // Mask off parts to be replaced & set
+
+            break;
+        }
+#endif
 
         default:
             if (error_buf != NULL)
