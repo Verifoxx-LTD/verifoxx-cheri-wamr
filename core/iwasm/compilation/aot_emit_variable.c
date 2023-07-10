@@ -124,6 +124,11 @@ compile_global(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
         offsetof(AOTModuleInstance, global_table_data.bytes)
         + sizeof(AOTMemoryInstance) * comp_ctx->comp_data->memory_count;
 
+#if AOT_CHERI_PTR_SIZE
+    // Need to align up on CHERI platforms
+    global_base_offset = cheri_align_up(global_base_offset, (uint32_t)AOT_CHERI_PTR_SIZE);
+#endif
+
     bh_assert(global_idx < import_global_count + comp_data->global_count);
 
     if (global_idx < import_global_count) {

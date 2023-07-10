@@ -56,6 +56,11 @@ if (DEFINED WAMR_BUILD_AOT_FUNC_PREFIX)
   add_definitions(-DAOT_FUNC_PREFIX="${WAMR_BUILD_AOT_FUNC_PREFIX}")
 endif ()
 
+if (DEFINED WAMR_BUILD_AOT_CHERI_PTR AND WAMR_BUILD_AOT_CHERI_PTR GREATER 0)
+    # Force use of CHERI pointer with given alignment
+    add_definitions(-DAOT_CHERI_PTR_SIZE=${WAMR_BUILD_AOT_CHERI_PTR})
+endif ()
+
 # Set WAMR_BUILD_TARGET, currently values supported:
 # "X86_64", "AMD_64", "X86_32", "ARM_32", "MIPS_32", "XTENSA_32"
 if (NOT WAMR_BUILD_TARGET)
@@ -195,6 +200,7 @@ if (NOT MSVC)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wformat -Wformat-security \
                                        -ffunction-sections -fdata-sections \
                                        -Wno-unused-parameter -Wno-pedantic")
+
   # Remove the extra spaces for better make log
   string (REGEX REPLACE "  *" " " CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
 endif()

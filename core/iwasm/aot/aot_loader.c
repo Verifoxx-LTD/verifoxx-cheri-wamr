@@ -11,6 +11,11 @@
 #include "../common/wasm_native.h"
 #include "../compilation/aot.h"
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#include "bh_assert.h"
+#endif
+
 #if WASM_ENABLE_DEBUG_AOT != 0
 #include "debug/elf_parser.h"
 #include "debug/jit_debug.h"
@@ -1635,8 +1640,19 @@ load_text_section(const uint8 *buf, const uint8 *buf_end, AOTModule *module,
 #endif
 
     if ((module->code_size > 0) && !module->is_indirect_mode) {
-        plt_base = (uint8 *)buf_end - get_plt_table_size();
+
+        plt_base = (uint8*)buf_end - get_plt_table_size();
+
+#if ENABLE_CHERI_PURECAP
+        // On purecap we specifically aligned up the total size to a capability boundary
+        // Therefore buf_end is aligned and therefore plt_base will also be algined because
+        // get_plt_table_size() will be aligned
+        bh_assert(cheri_is_aligned(plt_base, __BIGGEST_ALIGNMENT__));
         init_plt_table(plt_base);
+#else
+        init_plt_table(plt_base);
+#endif
+        
     }
     return true;
 fail:
@@ -1702,7 +1718,14 @@ load_function_section(const uint8 *buf, const uint8 *buf_end, AOTModule *module,
 #if defined(BUILD_TARGET_THUMB) || defined(BUILD_TARGET_THUMB_VFP)
         /* bits[0] of thumb function address must be 1 */
         module->func_ptrs[i] = (void *)((uintptr_t)module->func_ptrs[i] | 1);
+
+#elif ENABLE_CHERI_PURECAP
+        // On CHERI pure-cap bit[0] must be 1 (similar to thumb mode), otherwise
+        // on execution it will switch from C64 to A64
+        // Also we need to create a capability suitable for code execution
+        module->func_ptrs[i] = cheri_sentry_create((uintptr_t)module->func_ptrs[i] | 1);
 #endif
+
 #if defined(OS_ENABLE_HW_BOUND_CHECK) && defined(BH_PLATFORM_WINDOWS)
         rtl_func_table[i].BeginAddress = (DWORD)text_offset;
         if (i > 0) {
@@ -2666,6 +2689,18 @@ load_from_sections(AOTModule *module, AOTSection *sections,
         }
     }
 
+#if ENABLE_CHERI_PURECAP
+    uint8* buf_to_change = module->literal - sizeof(uint32);
+    uint32 length = module->code_size + module->literal_size + sizeof(uint32);
+
+    // Set code to execute only
+    if (0 != os_mprotect(buf_to_change, length, MMAP_PROT_EXEC | MMAP_PROT_READ))
+    {
+        set_error_buf(error_buf, error_buf_size, "Failed to set code to execute/read only");
+        return false;
+    }
+#endif
+
     /* Flush data cache before executing AOT code,
      * otherwise unpredictable behavior can occur. */
     os_dcache_flush();
@@ -2825,9 +2860,20 @@ create_sections(AOTModule *module, const uint8 *buf, uint32 size,
 #else
                     int map_flags = MMAP_MAP_NONE;
 #endif
+
+#if ENABLE_CHERI_PURECAP
+                    // On CHERI purecap the total size of the PLT table will be aligned to a
+                    // capability alignment boundary.  But we must also align the start of the
+                    // PLT table, so align up the total size to cover this
+                    bh_assert(cheri_is_aligned(aot_get_plt_table_size(), __BIGGEST_ALIGNMENT__));
+
+                    total_size = cheri_align_up((uint64)section_size, __BIGGEST_ALIGNMENT__)
+                        + aot_get_plt_table_size();
+#else
                     total_size =
                         (uint64)section_size + aot_get_plt_table_size();
                     total_size = (total_size + 3) & ~((uint64)3);
+#endif
                     if (total_size >= UINT32_MAX
                         || !(aot_text = os_mmap(NULL, (uint32)total_size,
                                                 map_prot, map_flags))) {

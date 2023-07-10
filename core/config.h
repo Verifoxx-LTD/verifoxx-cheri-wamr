@@ -322,6 +322,11 @@
 #define WASM_ENABLE_SPEC_TEST 0
 #endif
 
+/* AOT Exception workaround */
+#ifndef ENABLE_AOT_EXCEPTION_WORKAROUND
+#define ENABLE_AOT_EXCEPTION_WORKAROUND 0
+#endif
+
 /* Global heap pool size in bytes */
 #ifndef WASM_GLOBAL_HEAP_SIZE
 #define WASM_GLOBAL_HEAP_SIZE (10 * 1024 * 1024)
@@ -444,6 +449,10 @@
 
 #ifndef WASM_ENABLE_WASM_CACHE
 #define WASM_ENABLE_WASM_CACHE 0
+#endif
+
+#ifndef AOT_CHERI_PTR_SIZE
+#define AOT_CHERI_PTR_SIZE 0
 #endif
 
 #endif /* end of _CONFIG_H_ */

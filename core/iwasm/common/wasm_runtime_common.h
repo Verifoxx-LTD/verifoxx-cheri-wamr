@@ -358,7 +358,7 @@ typedef struct WASMModuleInstanceCommon {
 #ifdef __CHERI__
     uint8 module_inst_data[1] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
-    uint8 module_inst_data[1];
+    uint8 module_inst_data[1] __attribute__((aligned(16)));  // HACK
 #endif
 
 } WASMModuleInstanceCommon;

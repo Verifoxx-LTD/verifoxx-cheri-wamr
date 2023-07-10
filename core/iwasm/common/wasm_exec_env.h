@@ -180,7 +180,9 @@ typedef struct WASMExecEnv {
 #endif
     /* One guard page for the exception check */
     uint8 *exce_check_guard_page;
-#endif
+#elif ENABLE_AOT_EXCEPTION_WORKAROUND != 0
+    bool wasi_proc_exit_called;
+#endif  /* OS_ENABLE_HW_BOUND_CHECK */
 
 #if WASM_ENABLE_MEMORY_PROFILING != 0
     uint32 max_wasm_stack_used;
