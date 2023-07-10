@@ -322,6 +322,11 @@
 #define WASM_ENABLE_SPEC_TEST 0
 #endif
 
+/* AOT Exception workaround */
+#ifndef ENABLE_AOT_EXCEPTION_WORKAROUND
+#define ENABLE_AOT_EXCEPTION_WORKAROUND 0
+#endif
+
 /* Global heap pool size in bytes */
 #ifndef WASM_GLOBAL_HEAP_SIZE
 #define WASM_GLOBAL_HEAP_SIZE (10 * 1024 * 1024)

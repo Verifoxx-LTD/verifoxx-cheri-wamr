@@ -376,3 +376,17 @@ if ("$ENV{COLLECT_CODE_COVERAGE}" STREQUAL "1" OR COLLECT_CODE_COVERAGE EQUAL 1)
   add_definitions (-DCOLLECT_CODE_COVERAGE)
   message ("     Collect code coverage enabled")
 endif ()
+
+# Workaround AOT issue
+if ( (DEFINED WAMR_BUILD_AOT_EXCEPTION_WORKAROUND AND NOT WAMR_BUILD_AOT_EXCEPTION_WORKAROUND EQUAL 0)
+    AND (
+        (NOT WAMR_BUILD_AOT EQUAL 1)
+        OR ( (NOT WAMR_BUILD_LIBC_WASI EQUAL 1) AND (NOT WAMR_BUILD_LIBC_UVWASI EQUAL 1) )
+        OR (NOT WAMR_DISABLE_HW_BOUND_CHECK EQUAL 1)
+    )
+)
+    message ("     AOT Exception Workaround DISABLED (ignoring due to incompatible other flags)")
+elseif (DEFINED WAMR_BUILD_AOT_EXCEPTION_WORKAROUND AND NOT WAMR_BUILD_AOT_EXCEPTION_WORKAROUND EQUAL 0)
+    add_definitions(-DENABLE_AOT_EXCEPTION_WORKAROUND=1)
+    message ("     AOT exception workaround enabled")
+endif ()

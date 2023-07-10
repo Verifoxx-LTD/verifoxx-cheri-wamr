@@ -1682,6 +1682,13 @@ aot_set_exception(AOTModuleInstance *module_inst, const char *exception)
 void
 aot_set_exception_with_id(AOTModuleInstance *module_inst, uint32 id)
 {
+#ifndef OS_ENABLE_HW_BOUND_CHECK
+#if ENABLE_AOT_EXCEPTION_WORKAROUND != 0
+    if (module_inst->exec_env_singleton->wasi_proc_exit_called && id == EXCE_UNREACHABLE)
+        return; // Don't set exception as already called exit
+#endif
+#endif
+
     if (id != EXCE_ALREADY_THROWN)
         wasm_set_exception_with_id(module_inst, id);
 #ifdef OS_ENABLE_HW_BOUND_CHECK

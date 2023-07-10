@@ -30,7 +30,8 @@
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_APP": "0",
         "WAMR_BUILD_NATIVE_TEST_LIB": "1",
-        "WAMR_BUILD_AOT_CHERI_PTR": "16"
+        "WAMR_BUILD_AOT_CHERI_PTR": "16",
+        "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1"
       },
       "condition": {
         "type": "equals",
@@ -119,7 +120,6 @@
         "WAMR_BUILD_DEBUG_INTERP": "0",
         "WAMR_BUILD_MEMORY_TRACING": "0",
         "WAMR_BUILD_SIMD": "0",
-        "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_APP": "0",
         "WAMR_BUILD_NATIVE_TEST_LIB": "1",
         "WAMR_BUILD_AOT_CHERI_PTR": "16"
@@ -219,6 +219,5 @@
         }
       }
     }
-
   ]
 }
