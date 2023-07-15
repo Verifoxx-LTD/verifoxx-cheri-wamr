@@ -251,6 +251,11 @@ typedef struct AOTModule {
 #if WASM_ENABLE_LOAD_CUSTOM_SECTION != 0
     WASMCustomSection *custom_section_list;
 #endif
+#if ENABLE_CHERI_PURECAP
+    // Pre-allocated mmap() area to use for all the init data sections
+    void *init_data_mmap_region;
+    uint64 text_data_mmap_size; // Total size mmap'd for text+optionally data
+#endif
 } AOTModule;
 
 #define AOTMemoryInstance WASMMemoryInstance

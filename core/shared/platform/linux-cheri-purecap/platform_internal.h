@@ -63,6 +63,8 @@ typedef sem_t korp_sem;
 
 #define bh_socket_t int
 
+#define os_getpagesize getpagesize
+
 #if WASM_DISABLE_HW_BOUND_CHECK == 0
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64)            \
     || defined(BUILD_TARGET_AARCH64) || defined(BUILD_TARGET_RISCV64_LP64D) \
@@ -77,8 +79,6 @@ typedef jmp_buf korp_jmpbuf;
 #define os_setjmp setjmp
 #define os_longjmp longjmp
 #define os_alloca alloca
-
-#define os_getpagesize getpagesize
 
 typedef void (*os_signal_handler)(void *sig_addr);
 
