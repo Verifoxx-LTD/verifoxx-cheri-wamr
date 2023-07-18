@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
+#include <string.h> // For memset()
 
 static bool
 textual_addr_to_sockaddr(const char *textual, int port, struct sockaddr *out,
@@ -274,6 +275,13 @@ os_socket_recv_from(bh_socket_t socket, void *buf, unsigned int len, int flags,
             == BHT_ERROR) {
             return -1;
         }
+    }
+    else if (src_addr) {
+        // WAMR BUG: In the case where there is no address information, socklen == 0, therefore
+        // clear down src_addr to at least avoid non-valid data
+        src_addr->port = 0;
+        src_addr->is_ipv4 = true;
+        memset(&src_addr->addr_bufer, 0, sizeof(bh_ip_addr_buffer_t));
     }
 
     return ret;
