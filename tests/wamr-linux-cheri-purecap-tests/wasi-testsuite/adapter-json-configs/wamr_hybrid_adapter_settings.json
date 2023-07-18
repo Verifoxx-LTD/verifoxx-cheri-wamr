@@ -1,0 +1,21 @@
+{
+	"hostname": "192.168.0.39",
+	"user": "root",
+	"key":  "~//.ssh//id_morello",
+	"dest": "/root/tmp/.wasi-testsuite",
+	"wamr": "/root/tmp/linux-cheri-hybrid/iwasm",
+	"wamrc": "/home/bob/wamrc",
+	"wamrc_args": ["--target=aarch64",
+					"--target-abi=gnu",
+					"--cpu=rainier",
+					"--cpu-features=+morello"
+					],
+	"wamrc_host":
+	{
+    	"hostname": "localhost:2222",
+    	"user": "bob",
+    	"key": "~//.ssh//id_wsl2_linux",
+    	"dest": "/home/bob/tmp"
+    }
+}
+

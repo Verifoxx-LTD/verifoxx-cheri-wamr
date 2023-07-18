@@ -24,7 +24,9 @@ REQUIRED_JSON_KEYS = ['hostname',    # Remote host to connect to
 
 OPTIONAL_JSON_KEYS = [
              'wamrc_args',      # Target args to use for wamrc (as JSON list)
-             'wamrc_host'       # Optional remote host if wamrc not run locally
+             'wamrc_host',      # Optional remote host if wamrc not run locally
+             'allowres',   # String passed in allow-resolve argument
+             'addrpool'    # String passed in addr-pool argument
              ]
 
 WAMRC_HOST_JSON_KEYS = [
@@ -136,7 +138,11 @@ def do_aot_test():
     # Generate a random folder in the dest area
     dest_folder = PurePosixPath(json_dict['dest']).joinpath(uuid.uuid4().hex)
 
-    with Connection(host=json_dict['hostname'],
+    # split provided hostname:port into component parts
+    host, port = get_host_port(json_dict['hostname'])
+
+    with Connection(host=host,
+                    port=port,
                     user=json_dict['user'],
                     connect_kwargs={'key_filename': os.path.expanduser(json_dict['key'])},
                     ) as c:
@@ -160,10 +166,6 @@ def do_aot_test():
             # Made file has .aot extension and is absolute path
             aot_file = make_aot_file(json_dict['wamrc'], wamrc_target_args_list, Path(args.test_file), wamrc_host)
 
-            # Copy the AOT file
-            put_file(c, aot_file, dest_folder)
-            aot_dest_file = dest_folder.joinpath(aot_file.name)
-            
             # Copy test files
             fol_search = Path(args.test_file).parent
             files_match_pattern = f'{Path(args.test_file).stem}.*'  # Will also copy the .wasm, but this will be ignored
@@ -171,9 +173,20 @@ def do_aot_test():
             for entry in fol_search.glob(files_match_pattern):
                 dest_file = dest_folder.joinpath(Path(entry).relative_to(Path.cwd()))
                 c.put(entry, str(dest_file))
+
+            # Finally, copy the AOT file
+            put_file(c, aot_file, dest_folder)
+            aot_dest_file = dest_folder.joinpath(aot_file.name)
             
             # Prepare arguments (same format as WAMR adapter)
             TEST_FILE = aot_dest_file
+
+            # Add in optional address args so we can run network access WASMs
+            ADDR_ARGS = []
+            if 'addrpool' in json_dict:
+                ADDR_ARGS.append(f'--addr-pool={json_dict["addrpool"]}')
+            if 'allowres' in json_dict:
+                ADDR_ARGS.append(f'--allow-resolve={json_dict["allowres"]}')
 
             # Handle whitespace in prog args and env args            
             PROG_ARGS = [f"'{cmd}'" if len(cmd.split()) > 1 else cmd for cmd in args.arg]
@@ -182,7 +195,7 @@ def do_aot_test():
             DIR_ARGS = [f"--dir={i}" for i in args.dir]
             
             # Run wamr in the dest folder location
-            sys.exit(run_iwasm(c, json_dict['wamr'], dest_folder, ENV_ARGS + DIR_ARGS + [TEST_FILE] + PROG_ARGS))
+            sys.exit(run_iwasm(c, json_dict['wamr'], dest_folder, ENV_ARGS + DIR_ARGS + ADDR_ARGS + [TEST_FILE] + PROG_ARGS))
              
         finally:
             # Copy back the directories we sent

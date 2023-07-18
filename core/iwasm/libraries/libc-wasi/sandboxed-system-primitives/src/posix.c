@@ -3477,7 +3477,7 @@ wasmtime_ssp_sock_recv_from(
 {
     struct fd_object *fo;
     __wasi_errno_t error;
-    bh_sockaddr_t sockaddr;
+    bh_sockaddr_t sockaddr = { 0 };
     int ret;
 
     error = fd_object_get(curfds, &fo, sock, __WASI_RIGHT_FD_READ, 0);
