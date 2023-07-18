@@ -15,10 +15,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <limits.h>
 #include <unistd.h>
 
-#define PATH_TEST_FOLDER "./test"
-#define PATH_TEST_FILE (PATH_TEST_FOLDER "/test.txt")
+#define PATH_TEST_FILE "/test.txt"
 #define FILE_TEXT "Hello, there!"
 #define WORLD_OFFSET 7
 #define NAME_REPLACMENT "world" // Must be same length as "there"
@@ -31,16 +31,20 @@ main(int argc, char **argv)
     FILE *file;
     const char *text = FILE_TEXT;
     char buffer[1000];
+    char pathbuf[PATH_MAX] = { 0 };
     int ret;
     long long stat_size;
 
+    snprintf(pathbuf, sizeof(pathbuf) / sizeof(char), "%s", argv[1]);
+
     // Test: Create a folder to store the file, if it does not exist yet
-    ret = mkdir(PATH_TEST_FOLDER, 777);
+    ret = mkdir(pathbuf, 777);
     assert(ret == 0 || (ret == -1 && errno == EEXIST));
 
     // Test: File opening (fopen)
+    snprintf(pathbuf, sizeof(pathbuf) / sizeof(char), "%s%s", argv[1], PATH_TEST_FILE);
     printf("Opening a file..\n");
-    file = fopen(PATH_TEST_FILE, "w+");
+    file = fopen(pathbuf, "w+");
     if (file == NULL) {
         printf("Error! errno: %d\n", errno);
     }
@@ -169,7 +173,7 @@ main(int argc, char **argv)
     // Display some debug information
     printf("Getting the size of the file on disk..\n");
     struct stat st;
-    stat(PATH_TEST_FILE, &st);
+    stat(pathbuf, &st);
     stat_size = st.st_size;
     assert(stat_size != 0);
 
@@ -188,7 +192,7 @@ main(int argc, char **argv)
 
     // Test: Delete the file (remove)
     printf("Delete the file..\n");
-    ret = remove(PATH_TEST_FILE);
+    ret = remove(pathbuf);
     assert(ret == 0);
     printf("[Test] Delete file passed.\n");
 

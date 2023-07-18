@@ -1,0 +1,18 @@
+{
+	"hostname": "localhost:2222",
+	"user": "bob",
+	"key":  "~//.ssh//id_wsl2_linux",
+	"dest": "/home/bob/tmp",
+	"wamr": "/home/bob/x86/iwasm",
+	"wamrc": "/home/bob/wamrc",
+	"wamrc_args": [],
+	"wamrc_host":
+	{
+    	"hostname": "localhost:2222",
+    	"user": "bob",
+    	"key": "~//.ssh//id_wsl2_linux",
+    	"dest": "/home/bob/tmp"
+    },
+    "addrpool" : "0.0.0.0/0",
+    "allowres" : "*"
+}

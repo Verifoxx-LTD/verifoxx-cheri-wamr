@@ -1467,19 +1467,31 @@ destroy_object_data_sections(AOTObjectDataSection *data_sections,
 }
 
 static bool
-load_object_data_sections(const uint8 **p_buf, const uint8 *buf_end,
-                          AOTModule *module, bool is_load_from_file_buf,
-                          char *error_buf, uint32 error_buf_size)
+load_object_data_sections(const uint8** p_buf, const uint8* buf_end,
+    AOTModule* module, bool is_load_from_file_buf,
+    uint32 data_sections_total_size,
+    char* error_buf, uint32 error_buf_size)
 {
-    const uint8 *buf = *p_buf;
-    AOTObjectDataSection *data_sections;
+    const uint8* buf = *p_buf;
+    AOTObjectDataSection* data_sections;
     uint64 size;
     uint32 i;
+
+    /* On CHERI platforms, the data sections may be allocated in the same
+     * mmap() as text to provide ability of PC sourced relative address
+     * to access the data, which requires a capability in PC that can
+     * also see the data region.  If this is the case then
+     * module->init_data_mmap_region is != NULL
+     */
+
+#if ENABLE_CHERI_PURECAP
+    uint8* data_mmap_area = module->init_data_mmap_region;
+#endif
 
     /* Allocate memory */
     size = sizeof(AOTObjectDataSection) * (uint64)module->data_section_count;
     if (!(module->data_sections = data_sections =
-              loader_malloc(size, error_buf, error_buf_size))) {
+        loader_malloc(size, error_buf, error_buf_size))) {
         return false;
     }
 
@@ -1498,14 +1510,33 @@ load_object_data_sections(const uint8 **p_buf, const uint8 *buf_end,
 
         read_string(buf, buf_end, data_sections[i].name);
         read_uint32(buf, buf_end, data_sections[i].size);
+        
+        data_sections_total_size -= data_sections[i].size;  // Would wrap to maxuint if < 0
 
         /* Allocate memory for data */
         if (data_sections[i].size > 0
+#if ENABLE_CHERI_PURECAP
+            && !data_mmap_area  // On CHERI if this is != 0 then section already mmap()d
+#endif
             && !(data_sections[i].data = os_mmap(NULL, data_sections[i].size,
-                                                 map_prot, map_flags))) {
+                map_prot, map_flags))) {
             set_error_buf(error_buf, error_buf_size, "allocate memory failed");
             return false;
         }
+#if ENABLE_CHERI_PURECAP
+        else if (data_sections[i].size > 0 && data_mmap_area) {
+            data_sections[i].data = data_mmap_area;
+
+            if (0 != os_mprotect(data_mmap_area, data_sections[i].size, map_prot)) {
+                set_error_buf(error_buf, error_buf_size, "protect memory failed");
+                return false;
+            } else if (data_sections_total_size > 0) {
+                // Still another section to go so move up pointer
+                data_mmap_area += cheri_align_up(data_sections[i].size, os_getpagesize());
+            }
+        }
+#endif
+
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64)
 #if !defined(BH_PLATFORM_LINUX_SGX) && !defined(BH_PLATFORM_WINDOWS) \
     && !defined(BH_PLATFORM_DARWIN)
@@ -1516,11 +1547,12 @@ load_object_data_sections(const uint8 **p_buf, const uint8 *buf_end,
 #endif
 
         read_byte_array(buf, buf_end, data_sections[i].data,
-                        data_sections[i].size);
+            data_sections[i].size);
     }
 
     *p_buf = buf;
-    return true;
+    if (data_sections_total_size == 0)
+        return true;
 fail:
     return false;
 }
@@ -1528,23 +1560,22 @@ fail:
 static bool
 load_object_data_sections_info(const uint8 **p_buf, const uint8 *buf_end,
                                AOTModule *module, bool is_load_from_file_buf,
+                               uint32 data_sections_total_size,
                                char *error_buf, uint32 error_buf_size)
 {
     const uint8 *buf = *p_buf;
 
-    read_uint32(buf, buf_end, module->data_section_count);
+    // Note: module->data_section_count filled in before this function called
 
     /* load object data sections */
     if (module->data_section_count > 0
         && !load_object_data_sections(&buf, buf_end, module,
-                                      is_load_from_file_buf, error_buf,
-                                      error_buf_size))
+                                      is_load_from_file_buf, data_sections_total_size,
+                                        error_buf, error_buf_size))
         return false;
 
     *p_buf = buf;
     return true;
-fail:
-    return false;
 }
 
 static bool
@@ -1553,6 +1584,15 @@ load_init_data_section(const uint8 *buf, const uint8 *buf_end,
                        char *error_buf, uint32 error_buf_size)
 {
     const uint8 *p = buf, *p_end = buf_end;
+    uint32 data_sections_total_size;
+
+    /* AOT format change: Section begins with total object data sections count
+     * and the total size of all the data sections
+     * Note: these remain in the buffer for use in the section handling
+     */
+
+    read_uint32(p, p_end, module->data_section_count);
+    read_uint32(p, p_end, data_sections_total_size);
 
     if (!load_memory_info(&p, p_end, module, error_buf, error_buf_size)
         || !load_table_info(&p, p_end, module, error_buf, error_buf_size)
@@ -1586,8 +1626,8 @@ load_init_data_section(const uint8 *buf, const uint8 *buf_end,
     read_uint32(p, p_end, module->aux_stack_size);
 
     if (!load_object_data_sections_info(&p, p_end, module,
-                                        is_load_from_file_buf, error_buf,
-                                        error_buf_size))
+                                        is_load_from_file_buf, data_sections_total_size,
+                                        error_buf, error_buf_size))
         return false;
 
     if (p != p_end) {
@@ -2753,21 +2793,6 @@ aot_load_from_sections(AOTSection *section_list, char *error_buf,
     return module;
 }
 
-static void
-destroy_sections(AOTSection *section_list, bool destroy_aot_text)
-{
-    AOTSection *section = section_list, *next;
-    while (section) {
-        next = section->next;
-        if (destroy_aot_text && section->section_type == AOT_SECTION_TYPE_TEXT
-            && section->section_body)
-            os_munmap((uint8 *)section->section_body,
-                      section->section_body_size);
-        wasm_runtime_free(section);
-        section = next;
-    }
-}
-
 static bool
 resolve_execute_mode(const uint8 *buf, uint32 size, bool *p_mode,
                      char *error_buf, uint32 error_buf_size)
@@ -2808,22 +2833,71 @@ fail:
     return false;
 }
 
-static bool
-create_sections(AOTModule *module, const uint8 *buf, uint32 size,
-                AOTSection **p_section_list, char *error_buf,
-                uint32 error_buf_size)
+
+static void
+#if ENABLE_CHERI_PURECAP
+destroy_sections(AOTSection* section_list, bool destroy_aot_text, uint64 mmap_size)
+#else
+destroy_sections(AOTSection* section_list, bool destroy_aot_text)
+#endif
 {
-    AOTSection *section_list = NULL, *section_list_end = NULL, *section;
-    const uint8 *p = buf, *p_end = buf + size;
+    AOTSection* section = section_list, * next;
+    while (section) {
+        next = section->next;
+        if (destroy_aot_text && section->section_type == AOT_SECTION_TYPE_TEXT
+            && section->section_body)
+            os_munmap((uint8*)section->section_body,
+#if ENABLE_CHERI_PURECAP
+                // If mmap_size != 0 use that size as we mmap()'d extra for init data too
+                mmap_size ? mmap_size : section->section_body_size
+#else
+                section->section_body_size
+#endif
+                );
+        wasm_runtime_free(section);
+        section = next;
+    }
+}
+
+static bool
+create_sections(AOTModule* module, const uint8* buf, uint32 size,
+    AOTSection** p_section_list, char* error_buf,
+    uint32 error_buf_size)
+{
+    /*
+     * For CHERI purecap, we need to mmap() a single buffer to contain
+     * .text and all .rodata (init data) sections, so that PC relative
+     * addressing to a symbol resolved in initdata will still work. If
+     * this isn't done the capability for the code section won't include
+     * the init data which will lead to out of bounds seg fault.
+     * 
+     * Therefore this function updated to apply the mmap() after all sections
+     * have been scanned, as then (for applicable platforms) we will know the
+     * data size to mmap() too.
+     */
+
+    AOTSection* section_list = NULL, * section_list_end = NULL, * section;
+    const uint8* p = buf, * p_end = buf + size;
+    const uint8* p_temp;
     bool destroy_aot_text = false;
     bool is_indirect_mode = false;
     uint32 section_type;
     uint32 section_size;
     uint64 total_size;
-    uint8 *aot_text;
+    uint8* aot_text;
+
+    AOTSection* code_section = NULL;    // Store pointer to code section for use later
+    uint64 mmap_size = 0;
+    uint32 data_sections_size = 0;
+    uint32 data_sections_count = 0;
+
+#if ENABLE_CHERI_PURECAP
+    uint32 page_size = os_getpagesize();
+    uint64 data_section_total_size = 0; // Init data section size, stays at 0 if init data missing
+#endif
 
     if (!resolve_execute_mode(buf, size, &is_indirect_mode, error_buf,
-                              error_buf_size)) {
+        error_buf_size)) {
         goto fail;
     }
 
@@ -2835,72 +2909,37 @@ create_sections(AOTModule *module, const uint8 *buf, uint32 size,
         if (section_type < AOT_SECTION_TYPE_SIGANATURE
             || section_type == AOT_SECTION_TYPE_CUSTOM) {
             read_uint32(p, p_end, section_size);
+
             CHECK_BUF(p, p_end, section_size);
 
             if (!(section = loader_malloc(sizeof(AOTSection), error_buf,
-                                          error_buf_size))) {
+                error_buf_size))) {
                 goto fail;
             }
 
             memset(section, 0, sizeof(AOTSection));
             section->section_type = (int32)section_type;
-            section->section_body = (uint8 *)p;
+            section->section_body = (uint8*)p;
             section->section_body_size = section_size;
 
-            if (section_type == AOT_SECTION_TYPE_TEXT) {
-                if ((section_size > 0) && !module->is_indirect_mode) {
-                    int map_prot =
-                        MMAP_PROT_READ | MMAP_PROT_WRITE | MMAP_PROT_EXEC;
-#if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64) \
-    || defined(BUILD_TARGET_RISCV64_LP64D)                       \
-    || defined(BUILD_TARGET_RISCV64_LP64)
-                    /* aot code and data in x86_64 must be in range 0 to 2G due
-                       to relocation for R_X86_64_32/32S/PC32 */
-                    int map_flags = MMAP_MAP_32BIT;
-#else
-                    int map_flags = MMAP_MAP_NONE;
-#endif
-
+            if (AOT_SECTION_TYPE_INIT_DATA == section_type) {
+                /* AOT format change: Peek the number of data sections and the total size of them
+                 * Note: these remain in the buffer for use in the section handling
+                 */
+                p_temp = p;
+                read_uint32(p_temp, p_end, data_sections_count);
+                read_uint32(p_temp, p_end, data_sections_size);
+                
 #if ENABLE_CHERI_PURECAP
-                    // On CHERI purecap the total size of the PLT table will be aligned to a
-                    // capability alignment boundary.  But we must also align the start of the
-                    // PLT table, so align up the total size to cover this
-                    bh_assert(cheri_is_aligned(aot_get_plt_table_size(), __BIGGEST_ALIGNMENT__));
-
-                    total_size = cheri_align_up((uint64)section_size, __BIGGEST_ALIGNMENT__)
-                        + aot_get_plt_table_size();
-#else
-                    total_size =
-                        (uint64)section_size + aot_get_plt_table_size();
-                    total_size = (total_size + 3) & ~((uint64)3);
+                // Calculate the total size needed for data.  Align each section on a
+                // page boundary, so allow an extra amount for that.
+                data_section_total_size = data_sections_count * page_size + data_sections_size;
 #endif
-                    if (total_size >= UINT32_MAX
-                        || !(aot_text = os_mmap(NULL, (uint32)total_size,
-                                                map_prot, map_flags))) {
-                        wasm_runtime_free(section);
-                        set_error_buf(error_buf, error_buf_size,
-                                      "mmap memory failed");
-                        goto fail;
-                    }
-#if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64)
-#if !defined(BH_PLATFORM_LINUX_SGX) && !defined(BH_PLATFORM_WINDOWS) \
-    && !defined(BH_PLATFORM_DARWIN)
-                    /* address must be in the first 2 Gigabytes of
-                       the process address space */
-                    bh_assert((uintptr_t)aot_text < INT32_MAX);
-#endif
-#endif
-                    bh_memcpy_s(aot_text, (uint32)total_size,
-                                section->section_body, (uint32)section_size);
-                    section->section_body = aot_text;
-                    destroy_aot_text = true;
-
-                    if ((uint32)total_size > section->section_body_size) {
-                        memset(aot_text + (uint32)section_size, 0,
-                               (uint32)total_size - section_size);
-                        section->section_body_size = (uint32)total_size;
-                    }
-                }
+            } else if (section_type == AOT_SECTION_TYPE_TEXT && section_size > 0) {
+                // Save pointer to the code section for mmap() at
+                // end of function when we have the init data size
+                // NOTE: still need to check is_indirect_mode flag!
+                code_section = section;
             }
 
             if (!section_list)
@@ -2924,10 +2963,106 @@ create_sections(AOTModule *module, const uint8 *buf, uint32 size,
     }
 
     *p_section_list = section_list;
+
+#if ENABLE_CHERI_PURECAP
+    if (code_section && module->is_indirect_mode && data_section_total_size > 0) {
+        // If we have a text section, and also require init data sections, then
+        // it is not permitted to have XIP on CHERI platforms.
+        // This is because CHERI PC relative addresses require access to the 
+        // regions containing init data, i.e the capability bounds must include these
+        // areas.
+        set_error_buf(error_buf, error_buf_size, "XIP not allowed with code + data on CHERI");
+        goto fail;
+    }
+#endif
+    if (code_section && !module->is_indirect_mode) {
+        section = code_section;
+        section_size = code_section->section_body_size;
+
+        // Sort out text section mmap() as needed
+        int map_prot = MMAP_PROT_READ | MMAP_PROT_WRITE | MMAP_PROT_EXEC;
+
+#if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64) \
+    || defined(BUILD_TARGET_RISCV64_LP64D)                       \
+    || defined(BUILD_TARGET_RISCV64_LP64)
+        /* aot code and data in x86_64 must be in range 0 to 2G due
+           to relocation for R_X86_64_32/32S/PC32 */
+        int map_flags = MMAP_MAP_32BIT;
+#else
+        int map_flags = MMAP_MAP_NONE;
+#endif
+
+#if ENABLE_CHERI_PURECAP
+        // On CHERI purecap the total size of the PLT table will be aligned to a
+        // capability alignment boundary.  But we must also align the start of the
+        // PLT table, so align up the total size to cover this
+        bh_assert(cheri_is_aligned(aot_get_plt_table_size(), __BIGGEST_ALIGNMENT__));
+
+        total_size = cheri_align_up((uint64)section_size, __BIGGEST_ALIGNMENT__)
+            + aot_get_plt_table_size();
+
+        mmap_size = total_size; // Number of bytes to mmap
+
+        // Also on CHERI purecap, if there is any data sections to include in the mmap
+        // Then round up the total_size to a page boundary
+        if (data_section_total_size > 0) {
+            mmap_size = cheri_align_up(mmap_size, page_size);
+        }
+#else
+        total_size =
+            (uint64)section_size + aot_get_plt_table_size();
+        total_size = (total_size + 3) & ~((uint64)3);
+        mmap_size = total_size;
+#endif
+        if (mmap_size >= UINT32_MAX
+            || !(aot_text = os_mmap(NULL, (uint32)mmap_size
+#if ENABLE_CHERI_PURECAP
+                        + data_section_total_size
+#endif
+                    , map_prot, map_flags))) {
+            wasm_runtime_free(section);
+            set_error_buf(error_buf, error_buf_size,
+                "mmap memory failed");
+            goto fail;
+        }
+#if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64)
+#if !defined(BH_PLATFORM_LINUX_SGX) && !defined(BH_PLATFORM_WINDOWS) \
+    && !defined(BH_PLATFORM_DARWIN)
+        /* address must be in the first 2 Gigabytes of
+           the process address space */
+        bh_assert((uintptr_t)aot_text < INT32_MAX);
+#endif
+#endif
+        bh_memcpy_s(aot_text, (uint32)total_size,
+            section->section_body, (uint32)section_size);
+        section->section_body = aot_text;
+        destroy_aot_text = true;
+
+        if ((uint32)total_size > section->section_body_size) {
+            memset(aot_text + (uint32)section_size, 0,
+                (uint32)total_size - section_size);
+            section->section_body_size = (uint32)total_size;
+        }
+#if ENABLE_CHERI_PURECAP
+        // Set up the pointers for init data regions from the mmap'd area if needed
+        if (data_section_total_size > 0) {
+            // Data section to be mmap'd so store pointer to the region for it
+            module->init_data_mmap_region = (void*)&aot_text[mmap_size];
+
+            // Save total mmap'd size as needed for delete
+            module->text_data_mmap_size = mmap_size + data_section_total_size;
+        }
+#endif
+    }
+
     return true;
 fail:
     if (section_list)
+#if ENABLE_CHERI_PURECAP
+        destroy_sections(section_list, destroy_aot_text, module->text_data_mmap_size);
+#else
         destroy_sections(section_list, destroy_aot_text);
+#endif
     return false;
 }
 
@@ -2962,14 +3097,24 @@ load(const uint8 *buf, uint32 size, AOTModule *module, char *error_buf,
     if (!ret) {
         /* If load_from_sections() fails, then aot text is destroyed
            in destroy_sections() */
+
+#if ENABLE_CHERI_PURECAP
+        destroy_sections(section_list, module->is_indirect_mode ? false : true,
+            module->text_data_mmap_size);
+#else
         destroy_sections(section_list, module->is_indirect_mode ? false : true);
+#endif
         /* aot_unload() won't destroy aot text again */
         module->code = NULL;
     }
     else {
         /* If load_from_sections() succeeds, then aot text is set to
            module->code and will be destroyed in aot_unload() */
+#if ENABLE_CHERI_PURECAP
+        destroy_sections(section_list, false, module->text_data_mmap_size);
+#else
         destroy_sections(section_list, false);
+#endif
     }
     return ret;
 fail:

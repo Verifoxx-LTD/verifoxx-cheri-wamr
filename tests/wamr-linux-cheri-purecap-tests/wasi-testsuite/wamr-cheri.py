@@ -11,12 +11,20 @@ from pathlib import (Path, PurePosixPath)
 from invoke.vendor import six
 
 
-JSON_KEYS = ['hostname',    # Remote host to connect to
+REQUIRED_JSON_KEYS = ['hostname',    # Remote host to connect to
              'user',        # Username to login with
              'key',         # Key for SSH connection
              'dest',        # temp working folder on destination 
              'wamr'         # Full pathname of iwasm to execute
              ]
+
+OPTIONAL_JSON_KEYS = ['allowres',   # String passed in allow-resolve argument
+                      'addrpool',    # String passed in addr-pool argument
+                      'wamrc_args',      # IGNORED FOR NON-AOT
+                      'wamrc_host',      # IGNORED FOR NON-AOT
+                      'wamrc'            # IGNORED FOR NON-AOT
+                      ]
+
 
 def do_test():
     # Get the location of JSON file which provides arguments for the remote machine
@@ -28,8 +36,13 @@ def do_test():
     with open(json_file, 'r') as f:
         json_dict = json.load(f)
         
-    if not all(json_key in json_dict for json_key in JSON_KEYS):
+    if not all(json_key in json_dict for json_key in REQUIRED_JSON_KEYS):
         print(f'JSON file {json_file} missing required settings', file=sys.stderr)
+        sys.exit(-1)
+    
+    # Check no rogue args
+    if set(json_dict.keys()) - set(REQUIRED_JSON_KEYS) - set(OPTIONAL_JSON_KEYS):
+        print(f'JSON file {json_file} contains unknown settings', file=sys.stderr)
         sys.exit(-1)
     
     # Parse args
@@ -45,7 +58,11 @@ def do_test():
     # Generate a random folder in the dest area
     dest_folder = PurePosixPath(json_dict['dest']).joinpath(uuid.uuid4().hex)
     
-    with Connection(host=json_dict['hostname'],
+    # split provided hostname:port into component parts
+    host, port = get_host_port(json_dict['hostname'])
+
+    with Connection(host=host,
+                    port=port,
                     user=json_dict['user'],
                     connect_kwargs={'key_filename': os.path.expanduser(json_dict['key'])},
                     ) as c:
@@ -83,8 +100,15 @@ def do_test():
             
             DIR_ARGS = [f"--dir={i}" for i in args.dir]
             
+            # Add in optional address args so we can run network access WASMs
+            ADDR_ARGS = []
+            if 'addrpool' in json_dict:
+                ADDR_ARGS.append(f'--addr-pool={json_dict["addrpool"]}')
+            if 'allowres' in json_dict:
+                ADDR_ARGS.append(f'--allow-resolve={json_dict["allowres"]}')
+            
             # Run wamr in the dest folder location
-            sys.exit(run_iwasm(c, json_dict['wamr'], dest_folder, ENV_ARGS + DIR_ARGS + [TEST_FILE] + PROG_ARGS))
+            sys.exit(run_iwasm(c, json_dict['wamr'], dest_folder, ENV_ARGS + DIR_ARGS + ADDR_ARGS + [TEST_FILE] + PROG_ARGS))
              
         finally:
             # Copy back the directories we sent
@@ -141,6 +165,14 @@ def run_iwasm(conn, iwasm_prog, remote_folder, cmd_args):
         r = conn.run(f'{iwasm_prog}{" " if cmd_string else ""}{cmd_string}', warn=True)
         return r.exited
 
+def get_host_port(hostname_with_port_string):
+    try:
+        host, port = hostname_with_port_string.split(':')
+    except ValueError:
+        host = hostname_with_port_string
+        port = None # No port supplied
+
+    return host, port
     
 if __name__ == '__main__':
     do_test()

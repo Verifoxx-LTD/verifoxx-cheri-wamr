@@ -1,4 +1,7 @@
 (module
+  (import "wasi_snapshot_preview1" "proc_exit" (func $exit (param i32)))
+  (memory $memory (export "memory") 16)
+
   ;; Define a signature for the function (example is "int32 func(int32 param)")
   (type $myfunc_sig (func (param i32) (result i32)))    
   
@@ -15,11 +18,12 @@
   )
   
   ;; Do the call_indirect test (should return value of 101)
-  (func $do_test (export "do_test") (result i32)
-     (return (call_indirect (type $myfunc_sig)      ;; Signature
+  (func $main (export "_start")
+     (call_indirect (type $myfunc_sig)      ;; Signature
                             (i32.const 100)         ;; Parameters
                             (i32.const 0)           ;; Index of fn in table
-              )
-      )
-  )
+     )
+	(call $exit)
+	(unreachable)
+   )
 )

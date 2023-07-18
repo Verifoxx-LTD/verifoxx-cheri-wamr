@@ -75,7 +75,7 @@
 #endif
 
 #define AOT_MAGIC_NUMBER 0x746f6100
-#define AOT_CURRENT_VERSION 3
+#define AOT_CURRENT_VERSION 4       /* Updated due to format change to support CHERI */
 
 #ifndef WASM_ENABLE_JIT
 #define WASM_ENABLE_JIT 0
