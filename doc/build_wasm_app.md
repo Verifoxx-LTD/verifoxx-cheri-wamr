@@ -403,7 +403,7 @@ WAMRC_LLC_COMPILER=<path/to/your/compiler/driver> ./wamrc -o test.aot test.wasm
 
 > Note: the `LLC` and `ASM` in the env name just means this compiler will be used to compile the `LLVM IR file`/`assembly file` to object file, usually passing the compiler driver is the simplest way. (e.g. for LLVM toolchain, you don't need to pass `/usr/bin/llc`, using `/usr/bin/clang` is OK)
 
-### Cross-compiling WASM to AOT on CHERI Platforms
+## Cross-compiling WASM to AOT on CHERI Platforms
 Provided `wamrc` has been built to link against LLVM libraries suitable for cross-compiling to the CHERI target then an AOT file for CHERI can be generated.
 Morello is the supported target, and an AOT can be built suitable for a pure-cap mode WAMR or a hybrid-cap WAMR.
 
@@ -424,6 +424,24 @@ Note:
 3. If *c64* is specified, the ABI must contain the string *purecap*
 4. The CPU is not explicitly required, but *rainier* is the closest match
 5. If the *morello* feature is enabled, then the target triple string is built as *aarch64-unknown-linux-<ABI>* for example *aarch64-unknown-linux-musl_purecap*
+
+### Using a Custom LLVM to support CHERI Cross-Compilation
+The LLVM which may have been generated in the WAMR project may not be an Arm sourced version which supports CHERI Platforms.
+To build WAMRc with a different LLVM then please refer to [Building the AOT Compiler](../wamr-compiler/README.md).
+
+### Supporting CHERI Pure-cap Targets in wamrc
+To support CHERI Pure-cap targets it is necessary to align & pad pointers to the size of a capability pointer on the pure-cap platform.  This will apply for **all** targets.
+Please refer to [Building the AOT Compiler](../wamr-compiler/README.md) on how to do this with the WAMR_BUILD_AOT_CHERI_PTR CMake macro applied to wamrc.
+
+### Important note on XIP Option
+When building for CHERI Pure-cap platforms then the wamrc option `--enable-indirect-mode` should not be used as XIP may not be supported at runtime.
+XIP is only supported on CHERI Pure-cap if:
+- there is no text section
+- there are no init data sections
+
+This restriction is because pure-cap requires all text and init data sections be in the same, single mmap() region and this is not possible for XIP as this would execute from an existing buffer.
+
+**NOTE: If the AOT is built with XIP enabled and WAMR detects that this is not possible, then WAMR will fail at runtime with a suitable error message**.
 
 
 Run WASM app in WAMR mini product build

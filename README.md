@@ -14,6 +14,7 @@ It is therefore recommended to consult *./build_iwasm.sh* which allows you to co
 - CHERI_PURECAP=[0|1]		(set to 1 for purecap mode, 0 for hybrid)
 - CONFIG_TYPE=Debug|Release
 - NATIVE_TEST_LIB=[0|1]		(set to 1 to additionally build a native test shared object for iwasm, 0 to skip this)
+- AOT_CHERI_PTR=[0|8|16]		(set to 0 when building CHERI pure-cap, set to pure-cap native pointer size when building other architectures.  **Must match setting used to build WAMRc**.)
 - INSTALL_PREFIX=<install folder>	(where you want output to be written from cmake *--install*)
 
 This bash script assumes you will be using a toolchain file, see below for more on tihs.
@@ -47,7 +48,9 @@ The root CMakeLists.txt will build the native libs shared object after building 
 ### Building without the bash script
 ``` Bash
 mkdir build && cd build
-cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> -DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] [<wamr-build-flags>]
+cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> \
+	-DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] \
+	-DWAMR_BUILD_AOT_CHERI_PTR=[0|8|16] -DWAMR_BUILD_AOT_EXCEPTION_WORKAROUND=[0|1] [<wamr-build-flags>]
 
 cmake --build .
 cmake --install .
@@ -59,10 +62,12 @@ Where:
 - CHERI_PURECAP is 1 for purecap builds and 0 for hybrid capability builds (default 1)
 - CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring .so libs (default 1)
 - WAMR_BUILD_NATIVE_TEST_LIB is 0 for not additionally building the native test lib, 1 for building it (default 0)
+- WAMR_BUILD_AOT_CHERI_PTR is 0 on pure-cap platforms, pure-cap pointer size for hybrid or non-CHERI platforms (refer to WAMRc build for more details, and below)
+- WAMR_BUILD_AOT_EXCEPTION_WORKAROUND is 1 to include, 0 to exclude, a workaround for *_wasi_proc_exit* not terminating the AOT script when DWAMR_DISABLE_HW_BOUND_CHECK=1 (ByteCodeAlliance WAMR deficit)
 - <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).
 
+
 **Note:** For CHERI Morello WAMR build options contain some restrictions:
-- AOT mode is not yet supported so must be 0
 - JIT mode is not supported so must be 0
 - WAMR_BUILD_DEBUG_INTERP is not yet supported
 - WAMR_BUILD_SIMD must be 0
@@ -106,6 +111,7 @@ You must then select the your Ubuntu machine as the build target.  You can then 
 
 All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
 **NOTE:** Please modify the following flags as necessary to configure your build:
+- WAMR_BUILD_AOT					(default to 1 to include AOT support, set to 0 to exclude AOT)
 - WAMR_BUILD_FAST_INTERP			(default 1, set to 0 for classic interpreter mode)
 - WAMR_BUILD_DEBUG_PREPROCESSOR		(default 0, set to 1 for debug info)
 - WAMR_BUILD_MEMORY_TRACING			(default 0, set to 1 for extra trace info)
@@ -200,7 +206,7 @@ However, the CMakePresets.json has been specifically set up - and this is why it
 The only real problem is that compiler builtins which are pure-cap specific will likely not work.
 
 ## WAMR Front-end
-For development purposes a WAMR front-end is provided which can be used instead of iwasm.  This is found in */front-end* folder.
+For development purposes a *Limited* WAMR front-end is provided which can be used instead of iwasm.  This is found in */front-end* folder.
 
 You can build for the front-end instead of iwasm by passing an additional flag to CMake or add to CMakePresets.json as follows:
     WAMR_APP=1
@@ -217,6 +223,42 @@ For full usage run *wamr-app* with no arguments.
 
 wamr-app is functional in classic or fast interpreter mode, verbose logging is enabled (and cannot be changed) and stack and app heap size are fixed.
 Test native functions are included by building them into the wamr-app program.
+
+## Using AOT Mode and Compatibility with WAMRc
+**Please also refer to [Building the AOT Compiler](./wamr-compiler/README.md) for more details on WAMRc support for CHERI.**
+
+WAMRc is used to compile WASM and generate an AOT file.  This works by compiling WASM to LLVM IR and then generating target-specific object code from this.
+
+Unlike WAMR, WAMRc is not intended to be built for a single target.  Instead, the WAMRc target is resolved from WAMRc command line arguments.
+
+In the case of CHERI Morello targets, WAMRc will run on Linux x86_64 and cross-compile for Morello hybrid-cap or pure-cap.
+
+However this causes a problem because some WAMR structures must be laid out identically on both WAMRc build machine and WAMR run machine.
+In the case of WAMR on Morello pure-cap, all pointers are full capability and twice the size of a non-pure-cap platform.
+To solve this issue, the build flag WAMR_BUILD_AOT_CHERI_PTR is introduced.
+
+### Using WAMR_BUILD_AOT_CHERI_PTR build flag
+This macro is used on both WAMRc and WAMR.
+When non-zero, it specifies the maximum size of a pointer on **any** target which WAMRc can generate an AOT file for.  This causes WAMRc to always pad and align structure pointers to the value given in WAMR_BUILD_AOT_CHERI_PTR.
+
+In order for this to then work, the WAMR which will execute the AOT file must also be sure to align and pad pointers in the same structures to the same size.
+On CHERI pure-cap platforms, when building WAMR then WAMR_BUILD_AOT_CHERI_PTR should be set to 0.  This is because the pointers are naturally the specified size anyway.
+On all other platforms, when building WAMR then WAMR_BUILD_AOT_CHERI_PTR should be set the same as on WAMRc.
+
+### Runtime checks when WAMR_BUILD_AOT_CHERI_PTR used
+When WAMR_BUILD_AOT_CHERI_PTR is != 0 then the following checks will take place:
+- When running WAMRc, it will warn you need to build WAMR with the flag set if you build for a target that is not CHERI Pure-cap
+- When running WAMR, it will check affected structures are laid out correctly based on the value of WAMR_BUILD_AOT_CHERI_PTR
+
+### Example of using WAMR_BUILD_AOT_CHERI_PTR
+When CHERI Morello pure-cap is a *potential* WAMRc Target:
+	- Build WAMRc with WAMR_BUILD_AOT_CHERI_PTR=16
+	- Build Linux x86_64 with WAMR_BUILD_AOT_CHERI_PTR=16
+	- Build Morello Hybrid-cap with WAMR_BUILD_AOT_CHERI_PTR=16
+	- Build Morello pure-cap with WAMR_BUILD_AOT_CHERI_PTR=0 (or not defined)
+	
+
+
 
 
 ORIGINAL DOCUMENT -> WebAssembly Micro Runtime
