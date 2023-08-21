@@ -84,7 +84,7 @@ bh_static_assert(AOT_CHERI_PAD_SIZE >= 0);
 #if (WASM_ENABLE_JIT != 0 || WASM_ENABLE_WAMR_COMPILER != 0 \
      || WASM_ENABLE_AOT != 0)                               \
     && UINTPTR_MAX == UINT32_MAX                            \
-    && AOT_CHERI_PTR_SIZE <= 32         /* If AOT_CHERI_PTR_SIZE defined and > 32 then add the additional padding */
+    && AOT_CHERI_PTR_SIZE <= 4         /* If AOT_CHERI_PTR_SIZE defined and > 4 then add the additional padding */
 /* Add u32 padding if LLVM JIT, WAMR compiler or AOT is enabled on
    32-bit platform */
 #define DefPointer(type, field) \
@@ -280,7 +280,7 @@ typedef struct WASMModuleInstanceExtra {
     WASMTableInstance **table_insts_linked;
 #endif
 
-#if WASM_ENABLE_MEMORY_PROFILING != 0
+#if (WASM_ENABLE_MEMORY_PROFILING != 0) || (WASM_ENABLE_MEMORY_TRACING != 0)
     uint32 max_aux_stack_used;
 #endif
 

@@ -4510,6 +4510,10 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
         argv_src += 4;
     }
 
+    // Align up stack bytes used so it is always a multiple of capability ptr word
+    // This is needed because the asm code copies 16 bytes at a time
+    stack_bytes_used = cheri_align_up(stack_bytes_used, 16);
+
     exec_env->attachment = attachment;
     if (result_count == 0) {
         invokeNative_Void(func_ptr, argv1, stack_bytes_used);
