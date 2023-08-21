@@ -2,8 +2,11 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <cstring>
 #include "wasm_export.h"
 
+constexpr uint32_t WASM_STACK_SIZE = 4096;
+constexpr uint32_t WASM_HEAP_SIZE = 256;  // Small heap
 
 static NativeSymbol native_symbols[] = {
     EXPORT_WASM_API_WITH_SIG(do_sum, "(iii)i"),
@@ -25,6 +28,42 @@ extern "C" uint32_t do_sum(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uin
     return result;
 }
 
+bool create_local_runtime(wasm_module_inst_t * p_module_inst, wasm_exec_env_t * p_exec_env, wasm_module_inst_t curr_module_inst)
+{
+    // @ToDo : Error checks
+
+    RuntimeInitArgs init_args;
+
+    std::memset(&init_args, 0, sizeof(RuntimeInitArgs));
+
+    /* configure the memory allocator for the runtime */
+    init_args.mem_alloc_type = Alloc_With_System_Allocator;
+    init_args.mem_alloc_option.allocator.malloc_func = NULL;
+    init_args.mem_alloc_option.allocator.realloc_func = NULL;
+    init_args.mem_alloc_option.allocator.free_func = NULL;
+
+    /* initialize runtime environment with user configurations*/
+    wasm_runtime_full_init(&init_args);
+
+    /* Create module instance */
+    *p_module_inst = wasm_runtime_instantiate(wasm_runtime_get_module(curr_module_inst),
+        WASM_STACK_SIZE, WASM_HEAP_SIZE, NULL, 0);
+    
+    *p_exec_env = wasm_runtime_create_exec_env(*p_module_inst, WASM_STACK_SIZE);
+
+    return true;
+}
+
+bool destroy_local_runtime(wasm_module_inst_t module_inst, wasm_exec_env_t exec_env)
+{
+    // @ToDo Error checks!
+    wasm_runtime_destroy_exec_env(exec_env);
+    wasm_runtime_deinstantiate(module_inst);
+    wasm_runtime_destroy();
+    return true;
+}
+
+
 extern "C" uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uint32_t c)
 {
     (exec_env); // Unused
@@ -36,9 +75,20 @@ extern "C" uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, 
     std::array<uint32_t, 2> args{ a, b };   // Note: Result passed back occupies two*32bits
 
     auto module_inst = get_module_inst(exec_env);
-    auto func = wasm_runtime_lookup_function(module_inst, "subtract_in_wasm", NULL);
 
-    if (NULL != func && wasm_runtime_call_wasm(exec_env, func, args.size(), args.data()))
+    wasm_module_inst_t new_module_inst;
+    wasm_exec_env_t new_exec_env;
+
+    if (!create_local_runtime(&new_module_inst, &new_exec_env, module_inst))
+    {
+        std::cout << "    native FAILED created local runtime" << std::endl;
+        return 0;
+    }
+
+    auto func = wasm_runtime_lookup_function(new_module_inst, "subtract_in_wasm", NULL);
+
+    std::cout << "    native got WASM func" << std::endl;
+    if (NULL != func && wasm_runtime_call_wasm(new_exec_env, func, args.size(), args.data()))
     {
         auto result_64bit = *(reinterpret_cast<int64_t*>(&args[0]));
         std::cout << "    native successfully called WASM subtract_in_wasm(): result=" << result_64bit << std::endl;
@@ -47,6 +97,9 @@ extern "C" uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, 
     {
         std::cout << "    native FAILED call back to wasm, exception: " << wasm_runtime_get_exception(module_inst) << std::endl;
     }
+
+
+    destroy_local_runtime(new_module_inst, new_exec_env);
 
     std::cout << "    native do_sum()--: return=" << result << std::endl;
 
@@ -76,12 +129,22 @@ extern "C" uint64_t print_something_ex(wasm_exec_env_t exec_env, char* buffer)
     str.insert(0, "Native pass string->");
 
     auto module_inst = get_module_inst(exec_env);
-    auto buffer_idx = wasm_runtime_module_dup_data(module_inst, str.data(), str.length());
-    auto func = wasm_runtime_lookup_function(module_inst, "print_in_wasm", NULL);
+
+    wasm_module_inst_t new_module_inst;
+    wasm_exec_env_t new_exec_env;
+
+    if (!create_local_runtime(&new_module_inst, &new_exec_env, module_inst))
+    {
+        std::cout << "    native FAILED created local runtime" << std::endl;
+        return 0;
+    }
+
+    auto buffer_idx = wasm_runtime_module_dup_data(new_module_inst, str.data(), str.length());
+    auto func = wasm_runtime_lookup_function(new_module_inst, "print_in_wasm", NULL);
 
     std::array<uint32_t, 1> args{ buffer_idx };
 
-    if (buffer_idx && NULL != func && wasm_runtime_call_wasm(exec_env, func, args.size(), args.data()))
+    if (buffer_idx && NULL != func && wasm_runtime_call_wasm(new_exec_env, func, args.size(), args.data()))
     {
         std::cout << "    native successfully called WASM print_in_wasm(): result (length of buffer printed)=" << args[0] << std::endl;
     }
@@ -92,8 +155,10 @@ extern "C" uint64_t print_something_ex(wasm_exec_env_t exec_env, char* buffer)
 
     if (buffer_idx)
     {
-        wasm_runtime_module_free(module_inst, buffer_idx);
+        wasm_runtime_module_free(new_module_inst, buffer_idx);
     }
+
+    destroy_local_runtime(new_module_inst, new_exec_env);
 
     std::cout << "    native print_something()--: return=" << result << std::endl;
     return result;

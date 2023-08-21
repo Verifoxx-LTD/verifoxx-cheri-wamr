@@ -528,6 +528,7 @@ load_target_info_section(const uint8 *buf, const uint8 *buf_end,
         set_error_buf_v(error_buf, error_buf_size,
             "invalid target bit width expected %d bits but got %d bits",
             expected_size << 3, sizeof(void*) << 3);
+        return false;
     }
 
 #else

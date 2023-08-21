@@ -103,7 +103,7 @@ wasm_interp_interp_frame_size(unsigned all_cell_num)
 #ifdef __CHERI__
     // Allow for 4 extra alignments (classic) / 3 (fast) to cover potential aligning up within frame
 #if WASM_ENABLE_FAST_INTERP == 0
-    frame_size += sizeof(void* __capability) * 4;
+    frame_size += sizeof(void* __capability) * 3;
 #else
     frame_size += sizeof(void* __capability) * 4;
 #endif

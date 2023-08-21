@@ -184,7 +184,7 @@ typedef struct WASMExecEnv {
     bool wasi_proc_exit_called;
 #endif  /* OS_ENABLE_HW_BOUND_CHECK */
 
-#if WASM_ENABLE_MEMORY_PROFILING != 0
+#if (WASM_ENABLE_MEMORY_PROFILING != 0) || (WASM_ENABLE_MEMORY_TRACING != 0)
     uint32 max_wasm_stack_used;
 #endif
 
