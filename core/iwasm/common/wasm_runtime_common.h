@@ -1053,6 +1053,28 @@ WASM_RUNTIME_API_EXTERN bool
 wasm_runtime_is_import_global_linked(const char *module_name,
                                      const char *global_name);
 
+// CHERI inlines for r/w externref types
+#if (WASM_ENABLE_REF_TYPES && ENABLE_CHERI_PURECAP)
+
+/* Always leave space for 2 x ptr on CHERI to support possible alignment */
+static inline uint32 wasm_cheri_externref_size()
+{
+    return (sizeof(uintptr_t) << 1) / sizeof(uint32);
+}
+
+static inline uint32 wasm_cheri_externref_is_null(uintptr_t externref)
+{
+    return !cheri_tag_get(externref) && (uint64)-1LL == (uint64)externref;
+}
+
+/* Read uintptr_t from array at given offset and advance offset accordingly */
+uintptr_t wasm_cheri_read_externref_from_array(uint32* array, uint32* offset_ref);
+
+/* Write uintptr_t to array at given offset and advance offset accordingly*/
+void wasm_cheri_write_externref_to_array(uintptr_t externref, uint32* array, uint32* offset_ref);
+#endif
+
+
 #ifdef __cplusplus
 }
 #endif

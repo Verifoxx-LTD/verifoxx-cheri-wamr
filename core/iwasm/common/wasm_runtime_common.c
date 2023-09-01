@@ -1793,8 +1793,26 @@ wasm_runtime_prepare_call_function(WASMExecEnv *exec_env,
                 void *externref_obj;
                 uint32 externref_index;
 
+#if ENABLE_CHERI_PURECAP
+                /* On CHERI, pointers are aligned to a 16 byte boundary and the caller will have
+                   allocated enough space to allow for max alignment, i.e fixed space of 2 x sizeof(uintptr_t).
+                 */
+                externref_obj = wasm_cheri_read_externref_from_array(argv, &argv_i);    // Will advance argv_i
+
+                if (!wasm_externref_obj2ref(exec_env->module_inst,
+                    externref_obj, &externref_index)) {
+                    wasm_runtime_free(new_argv);
+                    return false;
+                }
+
+                new_argv[new_argv_i] = externref_index;
+                new_argv_i++;
+
+#else   /* ! ENABLE_CHERI_PURECAP */
+
 #if UINTPTR_MAX == UINT32_MAX
                 externref_obj = (void *)argv[argv_i];
+
 #else
                 union {
                     uintptr_t val;
@@ -1814,6 +1832,9 @@ wasm_runtime_prepare_call_function(WASMExecEnv *exec_env,
                 new_argv[new_argv_i] = externref_index;
                 argv_i += sizeof(uintptr_t) / sizeof(uint32);
                 new_argv_i++;
+
+#endif  /* ENABLE_CHERI_PURECAP */
+
             }
             else {
                 uint16 param_cell_num = wasm_value_type_cell_num(param_type);
@@ -1856,6 +1877,19 @@ wasm_runtime_finalize_call_function(WASMExecEnv *exec_env,
         uint8 result_type = func_type->types[func_type->param_count + result_i];
         if (result_type == VALUE_TYPE_EXTERNREF) {
             void *externref_obj;
+#if ENABLE_CHERI_PURECAP
+
+            if (!wasm_externref_ref2obj(argv[argv_i], &externref_obj)) {
+                wasm_runtime_free(argv);
+                return false;
+            }
+
+            // Write externref and update ret_argv_i to point to next element
+            wasm_cheri_write_externref_to_array(externref_obj, ret_argv, &ret_argv_i);
+
+            argv_i += 1;
+
+#else /* ! ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX != UINT32_MAX
             union {
                 uintptr_t val;
@@ -1877,6 +1911,8 @@ wasm_runtime_finalize_call_function(WASMExecEnv *exec_env,
 #endif
             argv_i += 1;
             ret_argv_i += sizeof(uintptr_t) / sizeof(uint32);
+#endif /* ENABLE_CHERI_PURECAP */
+
         }
         else {
             uint16 result_cell_num = wasm_value_type_cell_num(result_type);
@@ -2033,6 +2069,13 @@ parse_args_to_uint32_array(WASMType *type, wasm_val_t *args, uint32 *out_argv)
             }
             case WASM_ANYREF:
             {
+#if ENABLE_CHERI_PURECAP
+                uintptr_t externref = args[i].of.foreign;
+
+                // Write and advance p as required
+                wasm_cheri_write_externref_to_array(externref, out_argv, &p);
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 out_argv[p++] = args[i].of.foreign;
 #else
@@ -2045,6 +2088,7 @@ parse_args_to_uint32_array(WASMType *type, wasm_val_t *args, uint32 *out_argv)
                 out_argv[p++] = u.parts[0];
                 out_argv[p++] = u.parts[1];
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
                 break;
             }
 #endif
@@ -2111,6 +2155,14 @@ parse_uint32_array_to_results(WASMType *type, uint32 *argv,
             }
             case VALUE_TYPE_EXTERNREF:
             {
+
+#if ENABLE_CHERI_PURECAP
+                // Read externref and advance p to next entry
+                uintptr_t externref = wasm_cheri_read_externref_from_array(argv, &p);
+                out_results[i].kind = WASM_ANYREF;
+                out_results[i].of.foreign = externref;
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 out_results[i].kind = WASM_ANYREF;
                 out_results[i].of.foreign = (uintptr_t)argv[p++];
@@ -2124,9 +2176,11 @@ parse_uint32_array_to_results(WASMType *type, uint32 *argv,
                 out_results[i].kind = WASM_ANYREF;
                 out_results[i].of.foreign = u.val;
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
                 break;
             }
 #endif
+
             default:
                 bh_assert(0);
                 break;
@@ -4207,6 +4261,12 @@ typedef float32 (*Float32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef int32 (*Int32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+
+// PtrFuncPtr CHERI only
+typedef void* (*PtrFuncPtr)(GenericFunctionPointer, uint8*, uint64);
+static volatile PtrFuncPtr invokeNative_Ptr =
+(PtrFuncPtr)(uintptr_t)invokeNative;
+
 #else
 typedef float64(*Float64FuncPtr)(GenericFunctionPointer, uint64*, uint64);
 typedef float32(*Float32FuncPtr)(GenericFunctionPointer, uint64*, uint64);
@@ -4473,15 +4533,12 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
 
 #if WASM_ENABLE_REF_TYPES != 0
-#error "WASM_ENABLE_REF_TYPES not yet supported on CHERI"
             case VALUE_TYPE_EXTERNREF:
             {
                 uint32 externref_idx = *argv_src++;
                 if (is_aot_func) {
-                    if (n_ints < MAX_REG_INTS)
-                        ints[n_ints++] = externref_idx;
-                    else
-                        stacks[n_stacks++] = externref_idx;
+                    // Just an index - so thats an i32 which we treat as a 64-bit on CHERI
+                    update_args_as_int64((uint64)externref_idx, ints, stacks, &n_ints, &stack_bytes_used);
                 }
                 else {
                     void *externref_obj;
@@ -4489,10 +4546,9 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                     if (!wasm_externref_ref2obj(externref_idx, &externref_obj))
                         goto fail;
 
-                    if (n_ints < MAX_REG_INTS)
-                        ints[n_ints++] = (uintptr_t)externref_obj;
-                    else
-                        stacks[n_stacks++] = (uintptr_t)externref_obj;
+                    // Capability is effectively a pointer, and must be treated as a
+                    // full pointer (i.e double machine word) on CHERI
+                    update_args_as_pointer((uintptr_t)externref_obj, ints, stacks, &n_ints, &stack_bytes_used);
                 }
                 break;
             }
@@ -4510,9 +4566,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
         argv_src += 4;
     }
 
-    // Align up stack bytes used so it is always a multiple of capability ptr word
-    // This is needed because the asm code copies 16 bytes at a time
-    stack_bytes_used = cheri_align_up(stack_bytes_used, 16);
+    // Note: Align up stack bytes not needed as the ASM code will do this for us
 
     exec_env->attachment = attachment;
     if (result_count == 0) {
@@ -4544,12 +4598,14 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
             case VALUE_TYPE_EXTERNREF:
             {
                 if (is_aot_func) {
-                    argv_ret[0] = invokeNative_Int32(func_ptr, argv1, n_stacks);
+                    // Index which is i32
+                    argv_ret[0] = (uint32)invokeNative_Int32(func_ptr, argv1, stack_bytes_used);
                 }
                 else {
+                    // We return the full externref object, which is (potentially) a full capability
                     uint32 externref_idx;
-                    void *externref_obj = (void *)(uintptr_t)invokeNative_Int64(
-                        func_ptr, argv1, n_stacks);
+                    void *externref_obj = (void *)invokeNative_Ptr(
+                        func_ptr, argv1, stack_bytes_used);
 
                     if (!wasm_externref_obj2ref(exec_env->module_inst,
                                                 externref_obj, &externref_idx))
@@ -5006,18 +5062,28 @@ typedef struct ExternRefMapNode {
     bool marked;
 } ExternRefMapNode;
 
+
 static uint32
 wasm_externref_hash(const void *key)
 {
+#if ENABLE_CHERI_PURECAP
+    uint32 externref_idx = (uint32)(ptraddr_t)cheri_address_get(key);
+#else
     uint32 externref_idx = (uint32)(uintptr_t)key;
+#endif
     return externref_idx;
 }
 
 static bool
 wasm_externref_equal(void *key1, void *key2)
 {
+#if ENABLE_CHERI_PURECAP
+    uint32 externref_idx1 = (uint32)(ptraddr_t)cheri_address_get(key1);
+    uint32 externref_idx2 = (uint32)(ptraddr_t)cheri_address_get(key2);
+#else
     uint32 externref_idx1 = (uint32)(uintptr_t)key1;
     uint32 externref_idx2 = (uint32)(uintptr_t)key2;
+#endif
     return externref_idx1 == externref_idx2 ? true : false;
 }
 
@@ -5033,7 +5099,6 @@ wasm_externref_map_init()
         os_mutex_destroy(&externref_lock);
         return false;
     }
-
     externref_global_id = 1;
     return true;
 }
@@ -5078,14 +5143,32 @@ wasm_externref_obj2ref(WASMModuleInstanceCommon *module_inst, void *extern_obj,
      * to catch a parameter from `wasm_application_execute_func`,
      * which represents a string 'null'
      */
-#if UINTPTR_MAX == UINT32_MAX
-    if ((uint32)-1 == (uintptr_t)extern_obj) {
-#else
-    if ((uint64)-1LL == (uintptr_t)extern_obj) {
+
+    /* On CHERI, a "null" must have cleared tag */
+#if ENABLE_CHERI_PURECAP
+    if (!cheri_tag_get(extern_obj))
+    {
 #endif
-        *p_externref_idx = NULL_REF;
-        return true;
+
+#if UINTPTR_MAX == UINT32_MAX
+        if ((uint32)-1 == (uintptr_t)extern_obj) {
+#else
+        if ((uint64)-1LL == (uintptr_t)extern_obj) {
+#endif
+            * p_externref_idx = NULL_REF;
+            return true;
+        }
+#if ENABLE_CHERI_PURECAP
     }
+#endif
+
+    // On CHERI, warn if the externref (capability) is not sealed
+#if ENABLE_CHERI_PURECAP
+    if (cheri_tag_get(extern_obj) && !cheri_is_sealed(extern_obj))
+    {
+        LOG_WARNING("Capability passed to extern ref is not sealed!");
+    }
+#endif
 
     /* in a wrapper, extern_obj could be any value */
     lookup_user_data.node.extern_obj = extern_obj;
@@ -5149,8 +5232,13 @@ wasm_externref_ref2obj(uint32 externref_idx, void **p_extern_obj)
     node = bh_hash_map_find(externref_map, (void *)(uintptr_t)externref_idx);
     os_mutex_unlock(&externref_lock);
 
+
     if (!node)
+    {
+        LOG_WARNING("Entry for externref index %d could not be found in the internal hashmap!", externref_idx);
         return false;
+    }
+        
 
     *p_extern_obj = node->extern_obj;
     return true;
@@ -5848,3 +5936,44 @@ wasm_runtime_is_import_global_linked(const char *module_name,
     return false;
 #endif
 }
+
+#if (WASM_ENABLE_REF_TYPES && ENABLE_CHERI_PURECAP)
+
+uintptr_t wasm_cheri_read_externref_from_array(uint32* array, uint32* offset_ref)
+{
+    // Always align up to pointer, we leave 2 x pointer for space
+    uintptr_t* p_externref = (uintptr_t*)cheri_align_up(&array[*offset_ref], __BIGGEST_ALIGNMENT__);
+    *offset_ref += wasm_cheri_externref_size();
+
+    if (!cheri_tag_get(*p_externref))
+    {
+        LOG_WARNING("Reading externref pointer with invalidated tag!");
+    }
+
+    if (!cheri_is_sealed(*p_externref))
+    {
+        LOG_WARNING("Reading externref pointer which is not sealed!");
+    }
+
+    return *p_externref;
+}
+
+void wasm_cheri_write_externref_to_array(uintptr_t externref, uint32* array, uint32* offset_ref)
+{
+    // Always align up for pointer, we leave 2 x pointer for space
+    uintptr_t* aligned_addr = (uintptr_t*)cheri_align_up(&array[*offset_ref], __BIGGEST_ALIGNMENT__);
+    *offset_ref += wasm_cheri_externref_size();
+
+    if (!cheri_tag_get(externref))
+    {
+        LOG_WARNING("Writing externref pointer with invalidated tag!");
+    }
+
+    if (!cheri_is_sealed(externref))
+    {
+        LOG_WARNING("Writing externref pointer which is not sealed!");
+    }
+
+    *aligned_addr = externref;
+}
+#endif /* ENABLE_CHERI_PURECAP && WASM_ENABLE_REF_TYPES */

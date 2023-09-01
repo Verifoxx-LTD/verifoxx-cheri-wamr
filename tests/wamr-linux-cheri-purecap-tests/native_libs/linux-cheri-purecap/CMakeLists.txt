@@ -88,6 +88,8 @@ if (CHERI_PURECAP)
     message(STATUS "** Purecap versions of needed dynamic libraries will be searched in ${MORELLO_PURECAP_LIBS_FOLDER} **")
 
     set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}")
+    add_compile_definitions(ENABLE_CHERI_PURECAP=1)
+
 else ()
     message(STATUS "CHERI hybrid capability mode enabled")
     set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
@@ -100,6 +102,7 @@ set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -save-temps")
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_COMPILER_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_COMPILER_FLAGS}")
 set (CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}")
+
 
 if (NOT DEFINED WAMR_BUILD_PLATFORM)
     set (WAMR_BUILD_PLATFORM "linux-cheri-purecap")
