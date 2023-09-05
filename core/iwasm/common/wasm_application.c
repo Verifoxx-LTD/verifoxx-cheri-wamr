@@ -462,6 +462,23 @@ execute_func(WASMModuleInstanceCommon *module_inst, const char *name,
             }
             case VALUE_TYPE_EXTERNREF:
             {
+
+#if ENABLE_CHERI_PURECAP
+                // Values read from string cannot be pure capabilities
+                // Instead an i64 is stored for the capability - the tag will be invalid
+                uint64 value;
+
+                if (strncasecmp(argv[i], "null", 4) == 0) {
+                    value = (uint64)-1LL;
+                }
+                else {
+                    value = strtoull(argv[i], &endptr, 0);
+                }
+
+                // Write value as uintptr_t and increment p appropriately
+                wasm_cheri_write_externref_to_array((uintptr_t)value, argv1, &p);
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 if (strncasecmp(argv[i], "null", 4) == 0) {
                     argv1[p++] = (uint32)-1;
@@ -483,6 +500,8 @@ execute_func(WASMModuleInstanceCommon *module_inst, const char *name,
                 argv1[p++] = u.parts[0];
                 argv1[p++] = u.parts[1];
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
+
                 break;
             }
 #endif /* WASM_ENABLE_REF_TYPES */
@@ -565,6 +584,21 @@ execute_func(WASMModuleInstanceCommon *module_inst, const char *name,
             }
             case VALUE_TYPE_EXTERNREF:
             {
+
+#if ENABLE_CHERI_PURECAP
+                uintptr_t externref = wasm_cheri_read_externref_from_array(argv1, &k);
+
+                if (wasm_cheri_externref_is_null(externref))
+                {
+                    os_printf("extern:ref.null");
+                }
+                else
+                {
+                    // Note: Pretty print ref, consider this only print the address as surely must be invalid if sourced from command-line?
+                    os_printf("%#p:ref.extern", (void*)externref);
+                }
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 if (argv1[k] != 0 && argv1[k] != (uint32)-1)
                     os_printf("%p:ref.extern", (void *)argv1[k]);
@@ -584,6 +618,7 @@ execute_func(WASMModuleInstanceCommon *module_inst, const char *name,
                 else
                     os_printf("extern:ref.null");
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
                 break;
             }
 #endif

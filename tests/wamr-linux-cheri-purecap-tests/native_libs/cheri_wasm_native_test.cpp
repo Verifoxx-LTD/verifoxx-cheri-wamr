@@ -1,20 +1,57 @@
 #include "cheri_wasm_native_test.h"
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <array>
 #include <cstring>
+#include <stdio.h>
+#include <signal.h>
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#include <sys/auxv.h>
+#endif
+
 #include "wasm_export.h"
 
-constexpr uint32_t WASM_STACK_SIZE = 4096;
-constexpr uint32_t WASM_HEAP_SIZE = 256;  // Small heap
+// Add handler for a capability
+
+#if ENABLE_CHERI_PURECAP
+constexpr uint32_t ELEM_SIZE = 2 * sizeof(void*) / sizeof(int);
+#else
+constexpr uint32_t ELEM_SIZE = sizeof(void*) / sizeof(uint32_t);
+#endif
+
+static const std::array<uint32_t, 10> test_vals = { 0xdead, 0xbeef, 0xfaff, 0xbabe, 0xcafe, 0xfeed, 0xdeaf, 0xface, 0xfabb, 0xbead };
+
+constexpr uint32_t TEST_ARR_SIZE = 25;  // Arbitrary value
+
+static uint32_t get_test_val()
+{
+    static uint32_t i = 0;
+
+    return test_vals.at(i++ % test_vals.size());
+}
+
+static bool check_test_val(uint32_t value)
+{
+    static uint32_t i = 0;
+    return test_vals.at(i++ % test_vals.size()) == value;
+}
+
 
 static NativeSymbol native_symbols[] = {
     EXPORT_WASM_API_WITH_SIG(do_sum, "(iii)i"),
     EXPORT_WASM_API_WITH_SIG(print_something, "($)I"),
     EXPORT_WASM_API_WITH_SIG(do_sum_ex, "(iii)i"),
     EXPORT_WASM_API_WITH_SIG(print_something_ex, "($)I"),
-    EXPORT_WASM_API_WITH_SIG(do_sum_many_args, "(iiiiiiiiiiii$i)i")
+    EXPORT_WASM_API_WITH_SIG(do_sum_many_args, "(iiiiiiiiiiii$i)i"),
+
+    // Externref support
+    EXPORT_WASM_API_WITH_SIG(get_externref, "()r"),
+    EXPORT_WASM_API_WITH_SIG(put_externref, "(r)i"),
 };
+
+static char errbuf[128];
 
 
 extern "C" uint32_t do_sum(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uint32_t c)
@@ -42,13 +79,18 @@ bool create_local_runtime(wasm_module_inst_t * p_module_inst, wasm_exec_env_t * 
     init_args.mem_alloc_option.allocator.realloc_func = NULL;
     init_args.mem_alloc_option.allocator.free_func = NULL;
 
+    std::cout << "    native doing full init" << std::endl;
+
     /* initialize runtime environment with user configurations*/
     wasm_runtime_full_init(&init_args);
+
+    std::cout << "    native create new module instance" << std::endl;
 
     /* Create module instance */
     *p_module_inst = wasm_runtime_instantiate(wasm_runtime_get_module(curr_module_inst),
         WASM_STACK_SIZE, WASM_HEAP_SIZE, NULL, 0);
     
+    std::cout << "    native creating execution environment" << std::endl;
     *p_exec_env = wasm_runtime_create_exec_env(*p_module_inst, WASM_STACK_SIZE);
 
     return true;
@@ -56,13 +98,11 @@ bool create_local_runtime(wasm_module_inst_t * p_module_inst, wasm_exec_env_t * 
 
 bool destroy_local_runtime(wasm_module_inst_t module_inst, wasm_exec_env_t exec_env)
 {
-    // @ToDo Error checks!
     wasm_runtime_destroy_exec_env(exec_env);
     wasm_runtime_deinstantiate(module_inst);
     wasm_runtime_destroy();
     return true;
 }
-
 
 extern "C" uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uint32_t c)
 {
@@ -176,6 +216,71 @@ extern "C" uint32_t do_sum_many_args(wasm_exec_env_t exec_env,
     return sumval;
 }
 
+// Extern ref support
+
+#if ENABLE_CHERI_PURECAP
+uint8_t* get_sealer()
+{
+    static uint8_t* sealer = (uint8_t*)getauxptr(AT_CHERI_SEAL_CAP) + 0x1234;
+
+    return sealer;
+}
+#endif
+
+extern "C" uintptr_t get_externref(wasm_exec_env_t exec_env)
+{
+    std::cout << "   **** native get_externref() called" << std::endl;
+
+    // Alloc some memory and pass value to it
+    // This should not be on the sandbox heap as we won't use it in WASM
+    uint32_t* p = new uint32_t[TEST_ARR_SIZE];
+
+    for (uint32_t i = 0; i < TEST_ARR_SIZE; ++i)
+    {
+        p[i] = get_test_val();
+    }
+
+#if ENABLE_CHERI_PURECAP
+    std::cout << "    native SEALING CAPABILITY" << std::endl;
+    p = (uint32_t*)cheri_seal(p, get_sealer());
+    std::cout << "       --> Capability SEALED? " << cheri_is_sealed(p) << std::endl;
+    std::cout << "       --> Capability Tag: " << cheri_tag_get(p) << std::endl;
+#endif
+    return reinterpret_cast<uintptr_t>(p);
+}
+
+extern "C" int32_t put_externref(wasm_exec_env_t exec_env, uintptr_t extref)
+{
+    std::cout << "   **** native put_externref() called" << std::endl;
+    uint32_t* p = reinterpret_cast<uint32_t*>(extref);
+
+#if ENABLE_CHERI_PURECAP
+    std::cout << "       --> Capability SEALED? " << cheri_is_sealed(p) << std::endl;
+    std::cout << "       --> Capability Tag: " << cheri_tag_get(p) << std::endl;
+
+    p = (uint32_t*)cheri_unseal(p, get_sealer());
+    std::cout << "    native UNSEALING CAPABILITY" << std::endl;
+
+    if (!cheri_tag_get(p))
+    {
+        std::cout << "    native FAILED put value - capability tag should be set" << std::endl;
+        return -1;
+    }
+#endif
+    bool result{ true };
+    for (uint32_t i = 0; i < TEST_ARR_SIZE && result; ++i)
+    {
+        result = check_test_val(p[i]);
+        if (!result)
+        {
+            std::cout << "    native put_externref(): value check FAILED 0x" << std::hex << p[i] << " not expected" << std::endl;
+        }
+    }
+
+    delete[] p;
+    return (result) ? 0 : -1;
+}
+
 
 static NativeSymbol * native_symbols_table()
 {
@@ -195,4 +300,3 @@ extern "C" uint32_t get_native_lib(char** p_module_name, NativeSymbol **p_native
     *p_native_symbols = native_symbols_table();
     return num_native_symbols();
 }
-

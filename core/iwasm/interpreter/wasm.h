@@ -740,7 +740,11 @@ inline static uint16
 wasm_value_type_cell_num_outside(uint8 value_type)
 {
     if (VALUE_TYPE_EXTERNREF == value_type) {
+#if ENABLE_CHERI_PURECAP
+        return (sizeof(uintptr_t) << 1) / sizeof(uint32); // Double size of ptr on CHERI allows for alignment
+#else
         return sizeof(uintptr_t) / sizeof(uint32);
+#endif
     }
     else {
         return wasm_value_type_cell_num(value_type);

@@ -6,9 +6,6 @@ The source from which they were generated (either C code or WAT) can be found in
 
 A text version of the WASMs can be found in *wat_dumps/*.
 
-Note that version which call native functions are primarily designed to run with the WAMR frontend, wamr-app.
-This application includes a built set of native functions which are imported by the WASM.
-
 ## Building WASM
 Any WASM which is generated from C code is built with Clang, for most of the tests you will need WASI 
 support.  Although LLVM 8.0 or later supports WASM, to build the *wasm32-unknown-***wasi** target you will require the WASI-SDK libc to go with it.  By far the easiest thing is to obtain LLVM from WASI-SDK as then you don't need to install a separate download.
@@ -20,6 +17,9 @@ For now, we include all WASMs instead even though they can be considered an "int
 
 ## Native Libs
 This folder makes a unix shared object (.so) containing native functions, for use with iwasm native testing.
+
+## Externref Application
+This folder also includes a native application which embeds WAMR that is used for testing externref functionality, as this requires calling native -> WASM and not calling WASM -> native -> WASM in some cases.
 
 ## WASI-testsuite
 Support to run the WASI-testsuite remotely on Morello is provided, full details and needed scripts can be found [in this folder](wasi-testsuite).

@@ -244,6 +244,15 @@ add_library (libiwasm SHARED ${WAMR_RUNTIME_LIB_SOURCE})
 
 set_target_properties (libiwasm PROPERTIES OUTPUT_NAME iwasm)
 
+# In the case that fast interp is used, and we have debug mode, we need to optimise the file size as
+# handler table too big for range of +/-sizeof(int16)
+
+if (WAMR_BUILD_FAST_INTERP AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "**** IMPORTANT **** Optimising fast interp file for size on CHERI Debug builds")
+    set_source_files_properties( ${IWASM_INTERP_DIR}/${INTERPRETER} PROPERTIES COMPILE_FLAGS "-Os" )
+endif()
+
+
 # NOTE: Currently CHERI Morello apps should be built statically as native libs are hybrid (not purecap)
 # We cannot do that for a shared library, but build as much as possible statically and provide libc in a specific folder so there
 # is no interaction with the installed one.
