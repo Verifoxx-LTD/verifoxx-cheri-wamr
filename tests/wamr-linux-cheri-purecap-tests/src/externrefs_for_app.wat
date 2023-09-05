@@ -8,9 +8,7 @@
 
     (func $myfunc (type $native-print-type) (param $extref externref) (result i32)
         (call $native-print-externref (local.get $extref))
-        ;;(return (i32.const 7))
     )
-
 
     (memory $memory 1)
     (elem $elem_test_externref externref (ref.null extern) (ref.null extern))
@@ -59,8 +57,7 @@
     (func $funcref_test (export "funcref_test") (param $extref externref) (result i32)
         ;; The below just ends up calling the native function to print a capability
         (table.init $functab $elem_test_funcref (i32.const 0) (i32.const 0) (i32.const 1))
-        ;;(call_indirect $functab (type $native-print-type) (local.get $extref) (i32.const 0))
-        (call $native-print-externref (local.get $extref))
+        call_indirect $functab (type $native-print-type) (local.get $extref) (i32.const 0))
     )
 
     (func $table_test_get (export "table_test_get") (param i32) (result externref)
@@ -86,22 +83,4 @@
         ;; Return the 2nd arg straight back again
         (local.get 1)
     )
-
-    (func $do_cmdline_test (export "do_cmdline_test") (param $extref externref) (result externref)
-        ;; Call a native test which will call back to WASM to "externref_test_in_wasm"
-
-        ;; Send the passed in externref to native for print
-        (call $native-print-externref (local.get $extref))
-        drop    ;; Get rid of result
-
-        ;; Get an extref handle and return as result
-        (call $native-get-externref)
-    )
-
-    (func $main (export "main")
-        ;; Call a native test which will call back to WASM to "externref_test_in_wasm"
-        i32.const 0
-        (call $externref-call-wasm)
-        drop
-    )        
 )

@@ -221,6 +221,59 @@
           }
         }
       }
+    },
+    {
+      "name": "Externref_App_Purecap",
+      "displayName": "Externref_App_Purecap",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "WAMR_EXTERNREF_APP": "1"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "name": "Externref_App_x86_64",
+      "inherits": "Externref_App_Purecap",
+      "displayName": "Externref_App_x86_64",
+      "toolchainFile": "toolchain_x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux"
+      }
     }
   ]
 }

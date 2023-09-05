@@ -1064,7 +1064,7 @@ static inline uint32 wasm_cheri_externref_size()
 
 static inline uint32 wasm_cheri_externref_is_null(uintptr_t externref)
 {
-    return !cheri_tag_get(externref) && (uint64)-1LL == (uint64)externref;
+    return !cheri_tag_get(externref) && ((uint64)-1LL == (uint64)externref || (uint64)0LL == (uint64)externref);
 }
 
 /* Read uintptr_t from array at given offset and advance offset accordingly */

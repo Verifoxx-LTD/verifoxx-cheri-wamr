@@ -14,9 +14,11 @@ endif ()
 
 if ( (DEFINED WAMRC_TOOL) AND (WAMRC_TOOL) )
     add_subdirectory(wamr-compiler)
+
 elseif ( (DEFINED WAMR_EXTERNREF_APP) AND (WAMR_EXTERNREF_APP) )
     # Build the native app only
-    add_subdirectory(tests/wamr-linux-cheri-purecap-tests/externref-app)
+    add_subdirectory(tests/wamr-linux-cheri-purecap-tests/externref-app/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/externref-app/${WAMR_BUILD_PLATFORM})
+
 elseif ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
     add_subdirectory(product-mini/platforms/${WAMR_BUILD_PLATFORM} ${CMAKE_CURRENT_BINARY_DIR}/${WAMR_BUILD_PLATFORM})
 

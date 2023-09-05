@@ -21,6 +21,8 @@ constexpr uint32_t ELEM_SIZE = 2 * sizeof(void*) / sizeof(int);
 constexpr uint32_t ELEM_SIZE = sizeof(void*) / sizeof(uint32_t);
 #endif
 
+constexpr uint32_t TEST_ARR_SIZE = 5;
+
 static std::string print_extref(uintptr_t p)
 {
     std::stringstream strstr;
@@ -254,7 +256,7 @@ static int32_t externref_test_call_wasm_v(wasm_exec_env_t exec_env, wasm_functio
     }
 }
 
-static int32_t do_table_get_test(wasm_exec_env_t &exec_env, wasm_module_inst_t &module_inst)
+static int32_t do_table_get_test(wasm_exec_env_t &exec_env, wasm_module_inst_t &module_inst, const std::array<uintptr_t, TEST_ARR_SIZE> &testvals)
 {
     auto getfunc = wasm_runtime_lookup_function(module_inst, "table_test_get", NULL);
     auto nullcheck = wasm_runtime_lookup_function(module_inst, "table_test_null", NULL);
@@ -264,8 +266,10 @@ static int32_t do_table_get_test(wasm_exec_env_t &exec_env, wasm_module_inst_t &
     
     wasm_val_t results[1];
 
-    for (uint32_t i = 0; i < 5; ++i)
+    for (uint32_t i = 0; i < testvals.size(); ++i)
     {
+        uintptr_t testval = testvals[i];
+
         std::cout << "    **** native calling table_test_get() func" << std::endl;
 
         // Note: Last value should be the internal null, i.e "-1"
@@ -287,6 +291,8 @@ static int32_t do_table_get_test(wasm_exec_env_t &exec_env, wasm_module_inst_t &
 
         std::cout << "    native returned value " << std::hex << "0x" << (uint64_t)result_val << std::endl;
 
+        bool expect_null = false;
+
         // Check for null
         if (!wasm_runtime_call_wasm_v(exec_env, nullcheck, num_results, results, num_args, i))
         {
@@ -302,6 +308,17 @@ static int32_t do_table_get_test(wasm_exec_env_t &exec_env, wasm_module_inst_t &
             return -1;
         }
         std::cout << "    native result of is value null?: " << (uint32_t)results[0].of.i32 << std::endl;
+        expect_null = ((uint32_t)results[0].of.i32 == 1);
+
+        if ( (!testval && !expect_null) || (testval && expect_null) || (testval != result_val) )
+        {
+            std::cout << "    native bad value returned from WASM" << std::endl;
+            return -1;
+        }
+        else
+        {
+            std::cout << "    native returned value from WASM is correct" << std::endl;
+        }
     }
     return 0;
 }
@@ -310,20 +327,17 @@ static int32_t externref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t
 {
     // For this test let's just use non-capabilities
 
-    uint32_t num_args = 4, num_results = 1;
-    wasm_val_t args[2], results[1];
+    wasm_val_t args[2], wasm_result;
 
     auto setfunc = wasm_runtime_lookup_function(module_inst, "table_test_set", NULL);
     auto opstest = wasm_runtime_lookup_function(module_inst, "table_test_ops", NULL);
 
     std::cout << "    **** native calling table_test_set() func" << std::endl;
 
-    uintptr_t p1 = (uintptr_t)0x11LL;
-    uintptr_t p2 = (uintptr_t)0x22LL;
-    uintptr_t p3 = (uintptr_t)0x33LL;
-    uintptr_t p4 = (uintptr_t)0x44LL;
+    std::array<uintptr_t, TEST_ARR_SIZE> testvals_before = { 0x11LL, 0x22LL, 0x33LL, 0x44LL, NULL };
+    std::array<uintptr_t, TEST_ARR_SIZE> testvals_after = {NULL, NULL, 0x33LL, 0x44LL, 0x11};
 
-    if (!wasm_runtime_call_wasm_v(exec_env, setfunc, num_results, results, num_args, p1, p2, p3, p4))
+    if (!wasm_runtime_call_wasm_v(exec_env, setfunc, 1, &wasm_result, TEST_ARR_SIZE - 1, testvals_before[0], testvals_before[1], testvals_before[2], testvals_before[3]))
     {
         std::cout << "    native FAILED call back to wasm, exception: " << wasm_runtime_get_exception(module_inst) << std::endl;
         return -1;
@@ -333,16 +347,16 @@ static int32_t externref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t
     std::cout << "    native successfully called WASM table_test_set()" << std::endl;
 
     // Result should be i32 and size of table, i.e 4
-    if (results[0].kind != WASM_I32)
+    if (wasm_result.kind != WASM_I32)
     {
         std::cout << "    native bad call_wasm_a result type, expected WASM_I32" << std::endl;
         return -1;
     }
-    uint32_t result_size = results[0].of.i32;
+    uint32_t result_size = wasm_result.of.i32;
 
-    if (4+1 != result_size)
+    if (TEST_ARR_SIZE != result_size)
     {
-        std::cout << "    native failed to retrieve correct return value from function, expected 4 got " << result_size << std::endl;
+        std::cout << "    native failed to retrieve correct return value from function, expected " << TEST_ARR_SIZE <<" got " << result_size << std::endl;
         return -1;
     }
     else
@@ -351,7 +365,7 @@ static int32_t externref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t
     }
 
 
-    int32_t result = do_table_get_test(exec_env, module_inst);
+    int32_t result = do_table_get_test(exec_env, module_inst, testvals_before);
     if (0 != result)
     {
         return result;
@@ -367,23 +381,22 @@ static int32_t externref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t
     std::cout << "    native successfully called WASM table_test_ops()" << std::endl;
 
     // Now repeat the "get" test
-    return do_table_get_test(exec_env, module_inst);
+    return do_table_get_test(exec_env, module_inst, testvals_after);
 }
 
 static int32_t funcref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t module_inst)
 {
     // For this test let's just use non-capabilities
 
-    uint32_t num_args = 1, num_results = 1;
-    wasm_val_t args[2], results[1];
+    wasm_val_t wasm_result;
 
     auto func = wasm_runtime_lookup_function(module_inst, "funcref_test", NULL);
 
     std::cout << "    **** native calling funcref_test() func" << std::endl;
 
-    uintptr_t p1 = (uintptr_t)0xFFLL;
+    uintptr_t p1 = (uintptr_t)0xFFEEDDCCLL;
 
-    if (!wasm_runtime_call_wasm_v(exec_env, func, num_results, results, num_args, p1))
+    if (!wasm_runtime_call_wasm_v(exec_env, func, 1, &wasm_result, 1, p1))
     {
         std::cout << "    native FAILED call back to wasm, exception: " << wasm_runtime_get_exception(module_inst) << std::endl;
         return -1;
@@ -393,19 +406,19 @@ static int32_t funcref_table_test(wasm_exec_env_t exec_env, wasm_module_inst_t m
     std::cout << "    native successfully called WASM funcref_test()" << std::endl;
 
     // Result should be i32 and 0 on success
-    if (results[0].kind != WASM_I32)
+    if (wasm_result.kind != WASM_I32)
     {
         std::cout << "    native bad call_wasm_v result type, expected WASM_I32" << std::endl;
         return -1;
     }
-    int32_t result = results[0].of.i32;
+    int32_t result = wasm_result.of.i32;
     std::cout << "    native funcref_test() result = " << result << std::endl;
 
     return result;
 }
 
 
-// Test calling into WASM with an extern ref.  It should then call put_externref and return
+// Tests which call WASM from native for externrefs.
 extern "C" int32_t externref_test_called_from_native(wasm_exec_env_t exec_env, wasm_module_inst_t module_inst)
 {
     auto func = wasm_runtime_lookup_function(module_inst, "externref_test_in_wasm", NULL);

@@ -8,7 +8,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+
+#ifdef __CHERI__
 #include <cheriintrin.h>
+#endif
+
 #include "test_routines.h"
 
 static NativeSymbol native_symbols[] = {
@@ -17,8 +21,7 @@ static NativeSymbol native_symbols[] = {
     EXPORT_WASM_API_WITH_SIG(put_externref, "(r)i")
 };
 
-
-static char*read_file_to_buffer(const char* filename, uint32_t* ret_size)
+static char* read_file_to_buffer(const char* filename, uint32_t* ret_size)
 {
     char* buffer;
     int file;
@@ -64,7 +67,6 @@ static char*read_file_to_buffer(const char* filename, uint32_t* ret_size)
     *ret_size = file_size;
     return buffer;
 }
-
 
 static void destroy_app_wasm_runtime(wasm_exec_env_t exec_env, wasm_module_inst_t module_inst, wasm_module_t wasm_module, uint8_t *wasm_file_buf)
 {
@@ -146,6 +148,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
+    /* And create an execution environment */
     if (!(exec_env = wasm_runtime_create_exec_env(wasm_module_inst, WASM_STACK_SIZE)))
     {
         printf("Failed create exec env\n");
@@ -165,7 +168,14 @@ int main(int argc, char* argv[])
     
     destroy_app_wasm_runtime(exec_env, wasm_module_inst, wasm_module, wasm_file_buf);
 
-    printf("Test app exits with return code: %d\n", result);
+    if (0 == result)
+    {
+        printf("Tests PASS\n");
+    }
+    else
+    {
+        printf("Tests FALIED - return code: %d\n", result);
+    }
     return result;
 }
 

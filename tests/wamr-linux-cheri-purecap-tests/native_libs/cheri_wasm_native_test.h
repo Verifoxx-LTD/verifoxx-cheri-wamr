@@ -13,6 +13,9 @@ extern "C"
 #include <stdint.h>
 #endif
 
+#define WASM_STACK_SIZE 4096
+#define WASM_HEAP_SIZE 2048
+
 uint32_t do_sum(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uint32_t c);
 uint32_t do_sum_ex(wasm_exec_env_t exec_env, uint32_t a, uint32_t b, uint32_t c);   // Version which calls back to WASM from native
 uint32_t do_sum_many_args(wasm_exec_env_t exec_env,
@@ -26,6 +29,12 @@ uint64_t print_something_ex(wasm_exec_env_t exec_env, char* buffer);    // Versi
 
 // get_native_lib called from iwasm
 uint32_t get_native_lib(char** p_module_name, NativeSymbol** p_native_symbols);
+
+// get_externref creates on heap and creates values
+uintptr_t get_externref(wasm_exec_env_t exec_env);
+
+// put_externref checks values and frees from heap
+int32_t put_externref(wasm_exec_env_t exec_env, uintptr_t extref);
 
 #ifdef __cplusplus
 }

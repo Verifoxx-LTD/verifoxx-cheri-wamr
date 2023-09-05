@@ -15,6 +15,7 @@ It is therefore recommended to consult *./build_iwasm.sh* which allows you to co
 - CONFIG_TYPE=Debug|Release
 - NATIVE_TEST_LIB=[0|1]		(set to 1 to additionally build a native test shared object for iwasm, 0 to skip this)
 - AOT_CHERI_PTR=[0|8|16]		(set to 0 when building CHERI pure-cap, set to pure-cap native pointer size when building other architectures.  **Must match setting used to build WAMRc**.)
+- WAMR_EXTERNREF_APP=[0|1]  (set to 1 to build a native executable for externref testing INSTEAD of building WAMR.  Defaults to build WAMR.)
 - INSTALL_PREFIX=<install folder>	(where you want output to be written from cmake *--install*)
 
 This bash script assumes you will be using a toolchain file, see below for more on tihs.
@@ -50,7 +51,7 @@ The root CMakeLists.txt will build the native libs shared object after building 
 mkdir build && cd build
 cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> \
 	-DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] \
-	-DWAMR_BUILD_AOT_CHERI_PTR=[0|8|16] -DWAMR_BUILD_AOT_EXCEPTION_WORKAROUND=[0|1] [<wamr-build-flags>]
+	-DWAMR_BUILD_AOT_CHERI_PTR=[0|8|16] -DWAMR_BUILD_AOT_EXCEPTION_WORKAROUND=[0|1] [-DWAMR_EXTERNREF_APP=0|1][<wamr-build-flags>]
 
 cmake --build .
 cmake --install .
@@ -64,6 +65,7 @@ Where:
 - WAMR_BUILD_NATIVE_TEST_LIB is 0 for not additionally building the native test lib, 1 for building it (default 0)
 - WAMR_BUILD_AOT_CHERI_PTR is 0 on pure-cap platforms, pure-cap pointer size for hybrid or non-CHERI platforms (refer to WAMRc build for more details, and below)
 - WAMR_BUILD_AOT_EXCEPTION_WORKAROUND is 1 to include, 0 to exclude, a workaround for *_wasi_proc_exit* not terminating the AOT script when DWAMR_DISABLE_HW_BOUND_CHECK=1 (ByteCodeAlliance WAMR deficit)
+- WAMR_EXTERNREF_APP is 1 to build a standalone native application for externref testing INSTEAD of WAMR. Using this flag will NOT build WAMR at all (default 0).
 - <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).
 
 
@@ -89,6 +91,8 @@ This provides separate configurations for:
 - PureCap Release
 - Linux x86_64 Debug (a non-CHERI baseline for santity testing)
 - Linux x86_64 Release (a non-CHERI baseline for santity testing)
+- Externref_App_Purecap (build a separate, standalone native exe for externref testing instead of WAMR (on Morello purecap))
+- Externref_App_x86_64 (build a separate, standalone native exe for externref testing instead of WAMR (on x86_64))
 
 To use VS with CMake and this project "out of the box" you will need to have first carried out the following pre-requisite steps:
 1. Enable WSL2 in Windows (10 or 11) and installed a suitable Ubuntu distro
@@ -108,6 +112,8 @@ You must then select the your Ubuntu machine as the build target.  You can then 
 - Release armC64+ PureCap	(internal name "ARMc64-PureCap-release")
 - Linux Debug x86_64		(internal name "Linux_x86_64_Debug")
 - Linux Release x86_64		(internal name "Linux_x86_64_Release")
+- Externref_App_Purecap     (internal name "Externref_App_Purecap")
+- Externref_App_x86_64      (internal name "Externref_App_x86_64")
 
 All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
 **NOTE:** Please modify the following flags as necessary to configure your build:
@@ -116,6 +122,10 @@ All options are then set up correctly.  Visual Studio will automatically build m
 - WAMR_BUILD_DEBUG_PREPROCESSOR		(default 0, set to 1 for debug info)
 - WAMR_BUILD_MEMORY_TRACING			(default 0, set to 1 for extra trace info)
 - WAMR_BUILD_NATIVE_TEST_LIB		(default 0, set to 1 to additionally build the native test shared object file)
+
+#### Building the Externref Test Application
+Note that if building *Externref_App* then WAMR is **Not** additionally built, instead a native application is built which embeds WAMR library.
+Also note that all WAMR build options are hardcoded for this native application and cannot be overriden from *CMakePresets*.
 
 ### Troubleshooting
 1. If your project is located on a virtual drive under windows (i.e a subst drive) then you will have to make this available to WSL2.  Although most files are copied to WSL2 via *rsync*, the Ubuntu installation will still need your virtual drive mounted (i.e available as */mnt/drive_letter*).
@@ -206,6 +216,8 @@ However, the CMakePresets.json has been specifically set up - and this is why it
 The only real problem is that compiler builtins which are pure-cap specific will likely not work.
 
 ## WAMR Front-end
+**IMPORTANT: The separate front-end is now deprecated and should no longer be used**
+
 For development purposes a *Limited* WAMR front-end is provided which can be used instead of iwasm.  This is found in */front-end* folder.
 
 You can build for the front-end instead of iwasm by passing an additional flag to CMake or add to CMakePresets.json as follows:
@@ -223,6 +235,10 @@ For full usage run *wamr-app* with no arguments.
 
 wamr-app is functional in classic or fast interpreter mode, verbose logging is enabled (and cannot be changed) and stack and app heap size are fixed.
 Test native functions are included by building them into the wamr-app program.
+
+## Externref Test Application
+The externref test application is a native application that embeds WAMR functionality.  It is needed for testing externrefs when it is not possible to call WASM -> native -> WASM, because the called native cannot create a full execution environment.
+Refer to [Externref Test Application](./tests/wamr-linux-cheri-purecap-tests/externref-app/README.md) for details.
 
 ## Using AOT Mode and Compatibility with WAMRc
 **Please also refer to [Building the AOT Compiler](./wamr-compiler/README.md) for more details on WAMRc support for CHERI.**
