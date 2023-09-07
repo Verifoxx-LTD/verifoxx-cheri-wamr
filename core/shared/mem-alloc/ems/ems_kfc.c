@@ -4,6 +4,7 @@
  */
 
 #include "ems_gc_internal.h"
+#include <stddef.h>
 
 static gc_handle_t
 gc_init_internal(gc_heap_t *heap, char *base_addr, gc_size_t heap_max_size)
@@ -165,11 +166,16 @@ gc_get_heap_struct_size()
 }
 
 static void
-adjust_ptr(uint8 **p_ptr, intptr_t offset)
+adjust_ptr(uint8 **p_ptr, uint8* base_addr_old, char *base_addr_new)
 {
+    // Function updated to work with CHERI, calculate offsets from each base separately
     if (*p_ptr)
-        *p_ptr = (uint8 *)((intptr_t)(*p_ptr) + offset);
+    {
+        ptrdiff_t offset = *p_ptr - base_addr_old;
+        *p_ptr = ((uint8*)base_addr_new) + offset;
+    }
 }
+
 
 int
 gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
@@ -177,7 +183,12 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
     gc_heap_t *heap = (gc_heap_t *)handle;
     char *base_addr_new = pool_buf_new + GC_HEAD_PADDING;
     char *pool_buf_end = pool_buf_new + pool_buf_size;
-    intptr_t offset = (uint8 *)base_addr_new - (uint8 *)heap->base_addr;
+
+    // Note: To support CHERI platforms, the mechanism to adjust the heap node pointers is modified.
+    // Previously we calculated an offset between old and new bases and add this to the pointer,
+    // now we apply the offset based on the new base address
+    uint8 *base_addr_old = (uint8 *)heap->base_addr;
+
     hmu_t *cur = NULL, *end = NULL;
     hmu_tree_node_t *tree_node;
     uint8 **p_left, **p_right, **p_parent;
@@ -195,7 +206,7 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
         return GC_ERROR;
     }
 
-    if (offset == 0)
+    if ( (uint8*)base_addr_new == base_addr_old)
         return 0;
 
     if (heap->is_heap_corrupted) {
@@ -213,9 +224,9 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
                          + offsetof(hmu_tree_node_t, right));
     p_parent = (uint8 **)((uint8 *)heap->kfc_tree_root
                           + offsetof(hmu_tree_node_t, parent));
-    adjust_ptr(p_left, offset);
-    adjust_ptr(p_right, offset);
-    adjust_ptr(p_parent, offset);
+    adjust_ptr(p_left, base_addr_old, base_addr_new);
+    adjust_ptr(p_right, base_addr_old, base_addr_new);
+    adjust_ptr(p_parent, base_addr_old, base_addr_new);
 
     cur = (hmu_t *)heap->base_addr;
     end = (hmu_t *)((char *)heap->base_addr + heap->current_size);
@@ -240,12 +251,12 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
                                  + offsetof(hmu_tree_node_t, right));
             p_parent = (uint8 **)((uint8 *)tree_node
                                   + offsetof(hmu_tree_node_t, parent));
-            adjust_ptr(p_left, offset);
-            adjust_ptr(p_right, offset);
+            adjust_ptr(p_left, base_addr_old, base_addr_new);
+            adjust_ptr(p_right, base_addr_old, base_addr_new);
             if (tree_node->parent != heap->kfc_tree_root)
                 /* The root node belongs to heap structure,
                    it is fixed part and isn't changed. */
-                adjust_ptr(p_parent, offset);
+                adjust_ptr(p_parent, base_addr_old, base_addr_new);
         }
         cur = (hmu_t *)((char *)cur + size);
     }

@@ -602,9 +602,14 @@ wasm_enlarge_memory_internal(WASMModuleInstance *module, uint32 inc_page_count)
            (uint32)total_size_new - total_size_old);
 
     if (heap_size > 0) {
+
+        // Note: Passing pool_buf_new is same offset into new memory area as
+        // old memory area.  The calculation is changed, so as not to invalidate the
+        // capability on CHERI purecap
+        ptrdiff_t ptr_offset = heap_data_old - memory_data_old;
+
         if (mem_allocator_migrate(memory->heap_handle,
-                                  (char *)heap_data_old
-                                      + (memory_data_new - memory_data_old),
+                                  (char *)(memory_data_new + ptr_offset),
                                   heap_size)
             != 0) {
             /* Don't return here as memory->memory_data is obsolete and
