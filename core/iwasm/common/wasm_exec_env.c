@@ -47,6 +47,8 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
     {
         return NULL;
     }
+    memset(exec_env, 0, (uint32)sizeof(WASMExecEnv));
+
 
 #else
     uint64 total_size =

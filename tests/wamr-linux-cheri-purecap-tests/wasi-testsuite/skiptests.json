@@ -1,0 +1,7 @@
+{
+    "WASI Rust tests": {
+        "fd_filestat_get": "Test case likely flawed as can get access timestamp for STDIN on Linux.",
+		"interesting_paths": "WAMR returns ENOTCAPABLE not EPERM for attempt to open absolute path in root folder, therefore test case flawed.",
+		"close_preopen": "WAMR does not currently support closing a pre-opened file descriptor, which is required for this test to work."
+    }
+}
