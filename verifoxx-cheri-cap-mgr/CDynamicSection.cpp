@@ -112,3 +112,4 @@ Range CDynamicSection::GetFiniArray() const
     size_t sz = reinterpret_cast<size_t>(GetEntry(DT_FINI_ARRAYSZ));
     return Range(addr, sz);
 }
+

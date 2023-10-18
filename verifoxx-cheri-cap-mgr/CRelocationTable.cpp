@@ -13,7 +13,9 @@ const std::map< Elf64_Xword, std::string> CRelocationTable::m_reloc_id_map = {
     {R_MORELLO_CAPINIT, "R_MORELLO_CAPINIT"},
     {R_MORELLO_GLOB_DAT, "R_MORELLO_GLOB_DAT"},
     {R_MORELLO_JUMP_SLOT, "R_MORELLO_JUMP_SLOT"},
-    {R_MORELLO_RELATIVE, "R_MORELLO_RELATIVE"}
+    {R_MORELLO_RELATIVE, "R_MORELLO_RELATIVE"},
+    // Add TLSDESC support too
+    {R_MORELLO_TLSDESC, "R_MORELLO_TLSDESC"}
 };
 
 Range CRelocationTable::CheckAndGetRange() const

@@ -327,8 +327,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     "link_map_internal/link-internal.h"
 )
 
-target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc)
-target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -lm -lpthread -ldl -lc -static)
+target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
+target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lm)
 
 install (TARGETS ${PROJECT_NAME})
 install (TARGETS ${WAMR_LIB})

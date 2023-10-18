@@ -10,7 +10,8 @@
 
 #include "link_map_internal/link-internal.h"
 
-CCompartmentLibs::CCompartmentLibs(const std::string& so_name, const Capability &base_cap, const Capability &fixup_cap, bool load_new_linkmap)
+CCompartmentLibs::CCompartmentLibs(const std::string& so_name, const Capability &base_cap,
+    const Capability &fixup_cap, bool load_new_linkmap, bool include_loader) : m_include_loader{include_loader}
 {
     std::ostringstream strstr;
 
@@ -85,43 +86,52 @@ int CCompartmentLibs::ParseLinkMap(const std::string &so_name, const Capability 
             // Use the internal API of link_map to grab the phdrs
             auto internal_link_map = reinterpret_cast<struct internal_link_map*>(link_map);
 
-            auto phdr_ptr = internal_link_map->l_phdr;
-            auto phdr_num = internal_link_map->l_phnum;
-
-            // If l_real is not equal l_addr then reject as would be the loader
-            // also reject if no headers
-            if ( (cheri_address_get(internal_link_map) != cheri_address_get(internal_link_map->l_real))
-                || phdr_num == 0 || phdr_ptr == nullptr)
+            // If l_real is not equal link_map then reject if flagged, as would be the loader
+            if ((cheri_address_get(internal_link_map) != cheri_address_get(internal_link_map->l_real)) && !m_include_loader)
             {
-                std::cout << "Rejecting lib=" << full_name << " as no valid phdrs or found ld.so" << std::endl;
+                std::cout << "Rejecting lib=" << full_name << " as found ld.so" << std::endl;
             }
             else
             {
-                map_count++;
-                std::cout << "Parsing lib=" << full_name << "..." << std::endl;
-                // Construct the .so and add it to our list
-                // Build the capability from the base address of the DLL
-                // Note: problem is the base won't give us write perms, so source from the parsed in cap
+                // Update pointers in the case we have the loader
+                internal_link_map = internal_link_map->l_real;
 
-                Capability cap{ base_cap };
+                auto phdr_ptr = internal_link_map->l_phdr;
+                auto phdr_num = internal_link_map->l_phnum;
 
-                if (internal_link_map->l_addr == cheri_address_get(internal_link_map->l_map_start))
+                // Reject if no headers
+                if ( phdr_num == 0 || phdr_ptr == nullptr)
                 {
-                    cap.SetBounds(Capability(internal_link_map->l_map_start));
+                    std::cout << "Rejecting lib=" << full_name << " as no valid phdrs" << std::endl;
                 }
                 else
                 {
-                    cap.SetAddress(reinterpret_cast<void*>(laddr));
-                }
+                    map_count++;
+                    std::cout << "Parsing lib=" << full_name << "..." << std::endl;
+                    // Construct the .so and add it to our list
+                    // Build the capability from the base address of the DLL
+                    // Note: problem is the base won't give us write perms, so source from the parsed in cap
 
-                auto& elem = m_so_map[full_name] = CSharedObject{ full_name,  cap };
+                    Capability cap{ base_cap };
 
-                elem.Load(phdr_ptr, phdr_num, fixup_cap);
+                    if (internal_link_map->l_addr == cheri_address_get(internal_link_map->l_map_start))
+                    {
+                        cap.SetBoundsAndAddress(Capability(internal_link_map->l_map_start));
+                    }
+                    else
+                    {
+                        cap.SetAddress(reinterpret_cast<void*>(laddr));
+                    }
 
-                // Check for match with loaded lib name & save as needed
-                if (m_so_full_name.empty() && CCompartmentLibs::NameMatch(so_name, full_name))
-                {
-                    m_so_full_name = full_name;
+                    auto& elem = m_so_map[full_name] = CSharedObject{ full_name,  cap };
+
+                    elem.Load(phdr_ptr, phdr_num, fixup_cap);
+
+                    // Check for match with loaded lib name & save as needed
+                    if (m_so_full_name.empty() && CCompartmentLibs::NameMatch(so_name, full_name))
+                    {
+                        m_so_full_name = full_name;
+                    }
                 }
             }
 

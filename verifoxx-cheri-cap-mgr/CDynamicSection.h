@@ -53,7 +53,6 @@ public:
     Range GetInitArray() const;
     Range GetFiniArray() const;
 
-
     // Stream out whole thing
     friend std::ostream& operator<<(std::ostream& ostr, const CDynamicSection& dynsec)
     {

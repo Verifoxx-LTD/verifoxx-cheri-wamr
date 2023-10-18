@@ -37,7 +37,8 @@ static constexpr char NAME_RESOLVE[] = "*";
 array<const char *, 1> user_addr_pool = { ADDR_POOL };
 array<const char *, 1> user_lookup_pool = { NAME_RESOLVE };
 
-#define CAPMGR_BUILT_STATIC 1
+// TODO move the below to cmakepresets
+#define CAPMGR_BUILT_STATIC 0
 
 class CRunnerException : public std::runtime_error
 {

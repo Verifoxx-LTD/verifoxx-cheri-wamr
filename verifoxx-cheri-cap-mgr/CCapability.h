@@ -39,10 +39,11 @@ public:
     }
 
     // Set the bounds to whatever the bounds are of the target capability which must be
-    // within the range of the existing capability
-    Capability& SetBounds(const Capability &other_cap) {
-        m_cap = cheri_address_set(m_cap, reinterpret_cast<uintptr_t>(other_cap.m_cap));
-        m_cap = cheri_bounds_set(m_cap, cheri_length_get(other_cap.m_cap));
+    // within the range of the existing capability, and set the address to the other capability
+    Capability& SetBoundsAndAddress(const Capability &other_cap) {
+        m_cap = cheri_address_set(m_cap, cheri_base_get(other_cap.m_cap));            // Restrict lower bound to same as other
+        m_cap = cheri_bounds_set(m_cap, cheri_length_get(other_cap.m_cap));           // Restrict upper bound same as other
+        m_cap = cheri_offset_set(m_cap, cheri_offset_get(other_cap.m_cap));           // Current offset (like address) same as other
         return *this;
     }
 

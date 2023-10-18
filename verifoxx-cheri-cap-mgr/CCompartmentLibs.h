@@ -19,6 +19,7 @@ private:
     std::map<std::string, CSharedObject> m_so_map;      // All loaded sos for the link map, keyed by full pathname
     void* m_dll_handle = nullptr;                           // Handle of requested DLL
     std::string m_so_full_name;                               // Name of the requested so (resolved)
+    bool m_include_loader;
 
     // Parse the link map and return number of sos loaded
     int ParseLinkMap(const std::string &so_name, const Capability& base_cap, const Capability& fixup_cap);
@@ -35,8 +36,10 @@ public:
     // So name is name to load via dlopen()
     // base_cap is used to derive cap for the so (must have write privileges)
     // fixup_cap used to derive cap for all fixup patches (must have range to cover all sos loaded)
+    // load_new_linkmap is whether to dlmopen() which will use a new linkmap
+    // include_loader is whether to also patch up the ld.so shared object
     CCompartmentLibs(const std::string& so_name, const Capability &base_cap, const Capability &fixup_cap,
-        bool load_new_linkmap = true);
+        bool load_new_linkmap=true, bool include_loader=false);
 
     ~CCompartmentLibs()
     {

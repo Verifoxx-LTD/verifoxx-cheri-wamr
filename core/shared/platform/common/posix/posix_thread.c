@@ -9,6 +9,10 @@
 #include "platform_api_vmcore.h"
 #include "platform_api_extension.h"
 
+#if ENABLE_CHERI_PURECAP
+#include "cheri_compartment_temp_syscalls.h"
+#endif
+
 typedef struct {
     thread_start_routine_t start;
     void *arg;
@@ -378,7 +382,12 @@ os_thread_get_stack_boundary()
 
 #ifdef __linux__
     if (pthread_getattr_np(self, &attr) == 0) {
+
+#if ENABLE_CHERI_PURECAP
+        cheri_pthread_attr_getstack(&attr, (void**)&addr, &stack_size);
+#else
         pthread_attr_getstack(&attr, (void **)&addr, &stack_size);
+#endif
         pthread_attr_getguardsize(&attr, &guard_size);
         pthread_attr_destroy(&attr);
         if (stack_size > max_stack_size)
