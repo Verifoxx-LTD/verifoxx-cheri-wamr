@@ -32,6 +32,10 @@ if (NOT DEFINED CHERI_PURECAP)
     set (CHERI_PURECAP 1)
 endif ()
 
+if (NOT DEFINED CAPMGR_BUILT_STATIC)
+    set (CAPMGR_BUILT_STATIC 0)
+endif ()
+
 set (WAMR_BUILD_TARGET AARCH64)
 
 # Support cross-compilation only (makes things easier) - LLVM or GNU
@@ -268,6 +272,7 @@ add_library (${WAMR_LIB} SHARED ${WAMR_RUNTIME_LIB_SOURCE}
     "common/comp_common_defs.h"
     "common/comp_common_asm.h"
     "compartment/comp_entry.cpp"
+    "common/CCompartmentData.h"
 )
 
 target_include_directories(${WAMR_LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -280,6 +285,14 @@ set_property(TARGET ${PROJECT_NAME}  PROPERTY CXX_STANDARD 14)
 
 # Temporary hack for native symbol patchup, only when running in exe not lib
 target_compile_definitions(vmlib PUBLIC PATCHUP_NATIVE_SYMBOLS_HACK)
+
+# Cap manager static build or not
+if (CAPMGR_BUILD_STATIC)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC CAPMGR_BUILT_STATIC_ENABLE=1)
+else ()
+    target_compile_definitions(${PROJECT_NAME} PUBLIC CAPMGR_BUILT_STATIC_ENABLE=0)
+endif ()
+
 
 set_target_properties (${WAMR_LIB} PROPERTIES OUTPUT_NAME iwasm)
 
@@ -325,10 +338,15 @@ target_sources(${PROJECT_NAME} PRIVATE
     "CCompartmentLibs.cpp"
     "link_map_internal/linkmap.h"
     "link_map_internal/link-internal.h"
-)
+    "common/CCompartmentData.h")
 
-target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
-target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lm)
+if (CAPMGR_BUILD_STATIC)
+    target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc)
+    target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -lpthread -ldl -lm -lc -static)
+else ()
+    target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
+    target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
+endif ()
 
 install (TARGETS ${PROJECT_NAME})
 install (TARGETS ${WAMR_LIB})

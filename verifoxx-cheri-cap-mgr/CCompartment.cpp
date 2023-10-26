@@ -13,7 +13,8 @@
 using namespace std;
 
 
-CCompartment::CCompartment(CompartmentId id, uint32_t stack_size, uint32_t seal_id) : m_id(id)
+CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,
+                const std::string comp_unwrap_function) : m_comp_libs(comp_libs), m_id(id)
 {
     cout << "CCompartment: Constructing compartment id = " << 
         static_cast<typename underlying_type<CompartmentId>::type>(id) << endl;
@@ -33,7 +34,24 @@ CCompartment::CCompartment(CompartmentId id, uint32_t stack_size, uint32_t seal_
         .SetBounds(seal_id, seal_id + 1)
         .SetAddress(reinterpret_cast<void*>(seal_id))
         .SetPerms(kCompartmentSealerPerms);
-                    
+                  
+    // Lookup the compartment's entry function
+    void *unwrap_fn = m_comp_libs->GetDllSymbolByName(comp_unwrap_function);
+    if (!unwrap_fn)
+    {
+        throw CCompartmentException("Cannot find compartment unwrap function!");
+    }
+
+    // Make a restricted capability from our PCC (TO DO - FOR NOW) and the above address
+    m_comp_entry = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
+        .SetAddress(unwrap_fn)
+        .SetPerms(kCompartmentExecPerms)
+        .SEntry();
+
+    // Return function in executive
+    CompExitAsmFnPtr exit_fn = CompartmentExit;
+    void* exit_fn_void = Capability(reinterpret_cast<uintptr_t>(exit_fn));
+    m_exit_fn = reinterpret_cast<CompExitAsmFnPtr>(exit_fn_void);
 }
 
 void* CCompartment::CreateStack(uint32_t stack_size)
@@ -76,10 +94,10 @@ uintptr_t CCompartment::SetCtpidr()
     return c0;
 }
 
-void* CCompartment::RestrictAndSeal(void* comp_ptr_table)
+void* CCompartment::RestrictAndSeal(CCompartmentData* comp_fn_data)
 {
     // Set tight perms on the compartment's data table and seal it
-    void* restricted_cap = Capability(comp_ptr_table)
+    void* restricted_cap = Capability(comp_fn_data)
         .SetPerms(kCompartmentDataPerms);
 
     return cheri_seal(restricted_cap, m_sealer_cap);
@@ -87,66 +105,40 @@ void* CCompartment::RestrictAndSeal(void* comp_ptr_table)
 
 // Call the unwrapper function in the restricted
 // Seal the compartments data params
-bool CCompartment::CallCompartment(void *unwrap_fn)
+uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, const std::shared_ptr<CCompartmentData> &comp_fn_data)
 {
     cout << "CallCompartment: Calling ASM to call into restricted" << endl;
-    
-    // Get the compartment's data table, which now needs to be sealed
-    void* comp_table_sealed = RestrictAndSeal(GetCompTable());
 
-    // Get the pointer to the unwrapping function we need to call in the compartment
-    //CompUnwrapFnPtr fn = CompartmentUnwrap;
+    // Lookup the compartment's entry function
+    void* wamr_fn = m_comp_libs->GetDllSymbolByName(fn_to_call);
+    if (!wamr_fn)
+    {
+        throw CCompartmentException("Cannot find compartment's WAMR function!");
+    }
 
-    // Get its address only - we will built a new cap from this
-    //void *fn_addr = cheri_address_get(reinterpret_cast<uintptr_t>(fn));
-
-    // Make a restricted capability from our PCC (TO DO - FOR NOW) and the above address
-    void* comp_entry = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
-        .SetAddress(unwrap_fn)
+    // Lookup and then build a capability for the WAMR function
+    void* wamr_fn_void = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
+        .SetAddress(wamr_fn)
         .SetPerms(kCompartmentExecPerms)
         .SEntry();
+
+    // Finish building the compartment data
+    // To avoid extra functionality being in the header, we update these parameters here
+    comp_fn_data->comp_exit_fp = m_exit_fn;
+    comp_fn_data->fp = wamr_fn_void;
+
+    // Get the compartment's data table, which now needs to be sealed
+    // For the compartment, we use the underlying pointer to the shared_ptr
+    void* comp_fn_data_sealed = RestrictAndSeal(comp_fn_data.get());
     
     // Call the (C code) ASM wrapper. Arguments:
     // 1. Asm func to call for entry
     // 2. The compartment data (csp etc.)
     // 3. The unwrapping function (pointer) in restricted
-    // 4. The sealed comp data table
+    // 4. The sealed comp function data
     // 5. The sealer capability
 
-    uintptr_t p_result = CompartmentCaller(&CompartmentEntry, reinterpret_cast<void*>(&m_comp_data), comp_entry, comp_table_sealed, m_sealer_cap);
-    bool result = (bool)p_result;
+    uintptr_t result = CompartmentCaller(&CompartmentEntry, reinterpret_cast<void*>(&m_comp_data),
+                                m_comp_entry, comp_fn_data_sealed, m_sealer_cap);
     return result;
-}
-
-
-CWasmCallFuncCompartment::CWasmCallFuncCompartment(void* wamr_fn,
-    WASMExecEnv* exec_env,
-    WASMFunctionInstanceCommon* function,
-    uint32 num_results,
-    wasm_val_t* results,
-    uint32 num_args,
-    wasm_val_t* args) : CCompartment(CompartmentId::kCallFuncCompartment, CALL_FUNC_STACK_SIZE, CALL_FUNC_SEAL_ID)
-{
-    // Return function in executive
-    CompExitAsmFnPtr exit_fn = CompartmentExit;
-    void* exit_fn_void = Capability(reinterpret_cast<uintptr_t>(exit_fn));
-    exit_fn = reinterpret_cast<CompExitAsmFnPtr>(exit_fn_void);
-
-    // Build a capability for the WAMR function
-    void *wamr_fn_void = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
-        .SetAddress(wamr_fn)
-        .SetPerms(kCompartmentExecPerms)
-        .SEntry();
-
-    // Create params and build table
-    m_comp_params = new CompartmentWasmCall_t{
-        reinterpret_cast<FnPtr_wasm_runtime_call_wasm_a>(wamr_fn_void),
-        exec_env,
-        function,
-        num_results,
-        results,
-        num_args,
-        args,
-        exit_fn
-    };
 }

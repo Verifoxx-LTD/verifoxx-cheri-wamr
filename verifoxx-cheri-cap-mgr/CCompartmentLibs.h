@@ -8,9 +8,9 @@
 #include <map>
 
 #include "shared_object_common.h"
+#include "common/comp_common_defs.h"
 #include "CSharedObject.h"
 #include "CCapability.h"
-#include "CCompartment.h"
 
 class CCompartmentLibs
 {
@@ -80,7 +80,8 @@ public:
         if (symb)
         {
             auto cap{ basecap };
-            cap.SetAddress(symb).SetPerms(kCompartmentExecPerms);
+            cap.SetAddress(symb).SetPerms(CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | ARM_CAP_PERMISSION_MUTABLE_LOAD |
+                CHERI_PERM_EXECUTE | CHERI_PERM_GLOBAL);
             symb = cap;
             return symb;
         }

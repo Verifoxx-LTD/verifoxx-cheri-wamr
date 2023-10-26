@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <exception>
 #include <sstream>
+#include <memory>
 #include <cheriintrin.h>
 
 #include "wasm_c_api.h"
@@ -24,6 +25,7 @@
 
 #include "CCapability.h"
 #include "CCompartment.h"
+#include "common/CCompartmentData.h"
 #include "CCompartmentLibs.h"
 
 using namespace std;
@@ -37,8 +39,6 @@ static constexpr char NAME_RESOLVE[] = "*";
 array<const char *, 1> user_addr_pool = { ADDR_POOL };
 array<const char *, 1> user_lookup_pool = { NAME_RESOLVE };
 
-// TODO move the below to cmakepresets
-#define CAPMGR_BUILT_STATIC 0
 
 class CRunnerException : public std::runtime_error
 {
@@ -222,6 +222,21 @@ public:
 
         cout << "CallFuncNoReturn(): args prepared, call wasm_runtime_call_wasm_a()..." << endl;
 
+        // Build compartment
+        auto compartment = CCompartment(m_plibs, CCompartment::CompartmentId::kCallFuncCompartment, CALL_FUNC_STACK_SIZE, CALL_FUNC_SEAL_ID);
+
+        // Call with built data
+        bool result = (bool)compartment.CallCompartmentFunction("wasm_runtime_call_wasm_a",
+            std::make_shared<CWasmCallCompartmentData>(
+                m_exec_env,
+                m_fn,
+                0,
+                nullptr,
+                args.size(),
+                args.data() ? args.data() : nullptr)
+        );
+
+#if 0
         // Call the WASM func...
         CWasmCallFuncCompartment comp{m_plibs->GetDllSymbolByName("wasm_runtime_call_wasm_a"),
             m_exec_env,
@@ -233,7 +248,7 @@ public:
         };
 
         bool result = comp.CallCompartment(m_plibs->GetDllSymbolByName("CompartmentUnwrap"));
-
+#endif
         if (result)
         {
             cout << "CallCompartment() succeeds!" << endl;
@@ -250,7 +265,7 @@ static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plib
     auto rwcap{ Capability(getauxptr(AT_CHERI_EXEC_RW_CAP)) };
     auto fixup_cap{ Capability(getauxptr(AT_CHERI_EXEC_RW_CAP)) };
 
-#if CAPMGR_BUILT_STATIC
+#if CAPMGR_BUILT_STATIC_ENABLE
     bool load_new = false;  // For static build, the cap mgr has no linkmap so cannot load a new one
 #else
     bool load_new = true;
@@ -270,7 +285,7 @@ static bool lib_restore_and_end(CCompartmentLibs* plibs)
 {
     cout << "Revert Fixups..." << std::endl;
 
-#if CAPMGR_BUILT_STATIC
+#if CAPMGR_BUILT_STATIC_ENABLE
     cout << "Nothing to do with static build" << endl;
     return true;
 #else
