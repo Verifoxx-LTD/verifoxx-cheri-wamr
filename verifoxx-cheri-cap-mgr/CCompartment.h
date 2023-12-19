@@ -69,5 +69,13 @@ public:
 
     // Call into restricted, give the compartment data to pass for the function and the name of the function
     uintptr_t CallCompartmentFunction(const std::string &fn_to_call, const std::shared_ptr<CCompartmentData> &comp_fn_data);
+
+#if 0
+    bool wasm_runtime_call_wasm_a(wasm_exec_env_t exec_env,
+        wasm_function_inst_t function,
+        uint32_t num_results, wasm_val_t results[],
+        uint32_t num_args, wasm_val_t* args);
+#endif
 };
+
 #endif /* _CCOMPARTMENT_H__ */

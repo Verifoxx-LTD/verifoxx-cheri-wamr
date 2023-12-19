@@ -18,11 +18,48 @@ extern "C"
     // Fn pointer for compartment entry fn which is a C function
     typedef void(*CompUnwrapFnPtr)(void*);
 
-    // Fn pointer for the target WASM function
+    // Fn pointer for the target WAMR functions
     typedef bool(*FnPtr_wasm_runtime_call_wasm_a)(WASMExecEnv*,
         WASMFunctionInstanceCommon*,
         uint32, wasm_val_t*,
         uint32, wasm_val_t*);
+
+    typedef bool(*FnPtr_wasm_runtime_full_init)(RuntimeInitArgs* init_args);
+
+    typedef wasm_module_t(*FnPtr_wasm_runtime_load)(uint8_t* buf, uint32_t size,
+            char* error_buf, uint32_t error_buf_size);
+
+    typedef wasm_module_inst_t(*FnPtr_wasm_runtime_instantiate)(const wasm_module_t module,
+        uint32_t default_stack_size, uint32_t host_managed_heap_size,
+        char* error_buf, uint32_t error_buf_size);
+
+    typedef wasm_exec_env_t(*FnPtr_wasm_runtime_create_exec_env)(wasm_module_inst_t module_inst,
+        uint32_t stack_size);
+
+    typedef wasm_function_inst_t(*FnPtr_wasm_runtime_lookup_function)(wasm_module_inst_t const module_inst,
+        const char* name, const char* signature);
+
+    typedef void(*FnPtr_bh_log_set_verbose_level)(uint32 level);
+    typedef void(*FnPtr_wasm_runtime_set_exception)(wasm_module_inst_t module_inst, const char* exception);
+    typedef const char *(*FnPtr_wasm_runtime_get_exception)(wasm_module_inst_t module_inst);
+
+    typedef wasm_function_inst_t(*FnPtr_wasm_runtime_lookup_wasi_start_function)(wasm_module_inst_t module_inst);
+    typedef void(*FnPtr_wasm_runtime_set_wasi_args)(wasm_module_t module,
+        const char* dir_list[], uint32_t dir_count,
+        const char* map_dir_list[], uint32_t map_dir_count,
+        const char* env[], uint32_t env_count,
+        char* argv[], int argc);
+
+    typedef void(*FnPtr_wasm_runtime_set_wasi_addr_pool)(wasm_module_t module, const char* addr_pool[],
+        uint32_t addr_pool_size);
+
+    typedef void(*FnPtr_wasm_runtime_set_wasi_ns_lookup_pool)(wasm_module_t module, const char* ns_lookup_pool[],
+        uint32_t ns_lookup_pool_size);
+
+    typedef void(*FnPtr_wasm_runtime_destroy_exec_env)(wasm_exec_env_t exec_env);
+    typedef void(*FnPtr_wasm_runtime_deinstantiate)(wasm_module_inst_t module_inst);
+    typedef void(*FnPtr_wasm_runtime_unload)(wasm_module_t module);
+    typedef void(*FnPtr_wasm_runtime_destroy)();
 
     // Declare the initial function in the compartment
     void CompartmentUnwrap(void* comp_data_table);

@@ -27,7 +27,7 @@ CCompartmentLibs::CCompartmentLibs(const std::string& so_name, const Capability 
     }
     else
     {
-        // Create using new link map if specified
+        // Use existing link map
         if (!(m_dll_handle = dlopen(so_name.c_str(), RTLD_NOW | RTLD_LOCAL)))
         {
             strstr << "Failed dlopen() " << so_name << " : " << dlerror();

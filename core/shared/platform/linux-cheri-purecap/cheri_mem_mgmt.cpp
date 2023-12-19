@@ -84,6 +84,9 @@ void* __capability CheriMemMgr::cheri_malloc(size_t sz_bytes)
 #endif
     if (addr)
     {
+        // Sort out perms
+        addr = cheri_perms_clear(addr, ARM_CAP_PERMISSION_EXECUTIVE);
+
         if (TRACE_MEM)
         {
             curr_native_heap_used += get_actual_alloc_size(addr);
@@ -112,6 +115,8 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
 
     if (TRACE_MEM)
     {
+        addr = cheri_perms_clear(addr, ARM_CAP_PERMISSION_EXECUTIVE);
+
         curr_native_heap_used -= get_actual_alloc_size(ptr);
         curr_native_heap_used += get_actual_alloc_size(addr);
 

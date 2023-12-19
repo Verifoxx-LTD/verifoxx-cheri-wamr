@@ -113,7 +113,7 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
     void* wamr_fn = m_comp_libs->GetDllSymbolByName(fn_to_call);
     if (!wamr_fn)
     {
-        throw CCompartmentException("Cannot find compartment's WAMR function!");
+        throw CCompartmentException("Cannot find compartment WAMR function!");
     }
 
     // Lookup and then build a capability for the WAMR function
@@ -142,3 +142,4 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
                                 m_comp_entry, comp_fn_data_sealed, m_sealer_cap);
     return result;
 }
+

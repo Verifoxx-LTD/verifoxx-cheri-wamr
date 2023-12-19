@@ -39,7 +39,6 @@ static constexpr char NAME_RESOLVE[] = "*";
 array<const char *, 1> user_addr_pool = { ADDR_POOL };
 array<const char *, 1> user_lookup_pool = { NAME_RESOLVE };
 
-
 class CRunnerException : public std::runtime_error
 {
   public:
@@ -70,9 +69,16 @@ private:
 
     const CCompartmentLibs* m_plibs;
 
+    CCompartment m_compartment;
+
     // Setup WAMR environment
     bool setup()
     {
+        // Enable all logging
+        m_compartment.CallCompartmentFunction("bh_log_set_verbose_level",
+            std::make_shared<CWasmCallLogSetVerboseLevelData>(LOG_LEVEL)
+        );
+
         RuntimeInitArgs init_args;
         memset(&init_args, 0, sizeof(RuntimeInitArgs));
 
@@ -85,15 +91,23 @@ private:
         init_args.native_symbols = native_symbols;
 
         // Init runtime
-        wasm_runtime_full_init(&init_args);
-
+//        wasm_runtime_full_init(&init_args);
+        // Call with built data
+        m_compartment.CallCompartmentFunction("wasm_runtime_full_init",
+            std::make_shared<CWasmCallFullInitData>(&init_args)
+        );
         return true;
     }
 
     // Load module
     bool load_module(vector<char>& module_buff, int argc, char** argv)
     {
-        if (!(m_module = wasm_runtime_load( (uint8*)module_buff.data(), module_buff.size(), m_ex_buff.data(), m_ex_buff.size())))
+
+        m_module = (wasm_module_t)m_compartment.CallCompartmentFunction("wasm_runtime_load",
+            std::make_shared<CWasmCallRuntimeLoadData>((uint8*)module_buff.data(), module_buff.size(), m_ex_buff.data(), m_ex_buff.size())
+        );
+        if (!m_module)
+//        if (!(m_module = wasm_runtime_load( (uint8*)module_buff.data(), module_buff.size(), m_ex_buff.data(), m_ex_buff.size())))
         {
             cerr << "Failed to create module: " << m_ex_buff.data() << endl;
             return false;
@@ -101,9 +115,19 @@ private:
 
 #if WASM_ENABLE_LIBC_WASI != 0
         // Setup WASI now we have a module - no dir or env list currently
-        wasm_runtime_set_wasi_args(m_module, nullptr, 0, nullptr, 0, nullptr, 0, argv, argc);
-        wasm_runtime_set_wasi_addr_pool(m_module, user_addr_pool.data(), user_addr_pool.size());
-        wasm_runtime_set_wasi_ns_lookup_pool(m_module, user_lookup_pool.data(), user_lookup_pool.size());
+        m_compartment.CallCompartmentFunction("wasm_runtime_set_wasi_args",
+            std::make_shared<CWasmCallRuntimeSetWasiArgsData>(m_module, nullptr, 0, nullptr, 0, nullptr, 0, argv, argc)
+        );
+        m_compartment.CallCompartmentFunction("wasm_runtime_set_wasi_addr_pool",
+            std::make_shared<CWasmCallRuntimeSetWasiAddrPoolData>(m_module, user_addr_pool.data(), user_addr_pool.size())
+        );
+        m_compartment.CallCompartmentFunction("wasm_runtime_set_wasi_ns_lookup_pool",
+            std::make_shared<CWasmCallRuntimeSetWasiNsLookupPoolData>(m_module, user_lookup_pool.data(), user_lookup_pool.size())
+        );
+
+        //wasm_runtime_set_wasi_args(m_module, nullptr, 0, nullptr, 0, nullptr, 0, argv, argc);
+        //wasm_runtime_set_wasi_addr_pool(m_module, user_addr_pool.data(), user_addr_pool.size());
+        //wasm_runtime_set_wasi_ns_lookup_pool(m_module, user_lookup_pool.data(), user_lookup_pool.size());
 #endif
         return true;
     }
@@ -111,7 +135,11 @@ private:
     // Instantiate module
     bool instantiate_module()
     {
-        if (!(m_module_inst = wasm_runtime_instantiate(m_module, STACK_SIZE, HEAP_SIZE, m_ex_buff.data(), m_ex_buff.size())))
+        m_module_inst = (wasm_module_inst_t)m_compartment.CallCompartmentFunction("wasm_runtime_instantiate",
+            std::make_shared<CWasmCallRuntimeInstantiateData>(m_module, STACK_SIZE, HEAP_SIZE, m_ex_buff.data(), m_ex_buff.size())
+        );
+        if (!m_module_inst)
+//        if (!(m_module_inst = wasm_runtime_instantiate(m_module, STACK_SIZE, HEAP_SIZE, m_ex_buff.data(), m_ex_buff.size())))
         {
             cerr << "Failed to instantiate module" << endl;
             return false;
@@ -123,13 +151,41 @@ private:
     // Create exec env
     bool create_exec_env()
     {
-        if (!(m_exec_env = wasm_runtime_create_exec_env(m_module_inst, STACK_SIZE)))
+        m_exec_env = (wasm_exec_env_t)m_compartment.CallCompartmentFunction("wasm_runtime_create_exec_env",
+            std::make_shared<CWasmCallRuntimeCreateExecEnvData>(m_module_inst, STACK_SIZE)
+        );
+
+        if (!m_exec_env)
+//        if (!(m_exec_env = wasm_runtime_create_exec_env(m_module_inst, STACK_SIZE)))
         {
             cerr << "Failed create exec env" << endl;
             return false;
         }
 
         return true;
+    }
+
+    wasm_function_inst_t find_function(const string& fn_name, const char *signature)
+    {
+        return (wasm_function_inst_t)m_compartment.CallCompartmentFunction("wasm_runtime_lookup_function",
+            std::make_shared<CWasmCallRuntimeLookupFunctionData>(m_module_inst,
+                fn_name.c_str(),
+                signature)
+        );
+    }
+
+    wasm_function_inst_t find_wasi_start_function()
+    {
+        return (wasm_function_inst_t)m_compartment.CallCompartmentFunction("wasm_runtime_lookup_wasi_start_function",
+            std::make_shared<CWasmCallRuntimeLookupWasiStartFunctionData>(m_module_inst)
+        );
+    }
+
+    const char* wasm_runtime_get_exception(wasm_module_inst_t m_module_inst)
+    {
+        return (const char*)m_compartment.CallCompartmentFunction(__func__,
+            std::make_shared<CWasmCallRuntimeGetExceptionData>(m_module_inst)
+        );
     }
 
     // Set runtime function (which could be "main" or "_start"
@@ -139,31 +195,35 @@ private:
         {
             // Try and resolve name
 #if WASM_ENABLE_LIBC_WASI != 0
-            if ((m_fn = wasm_runtime_lookup_wasi_start_function(m_module_inst)))
+            if ((m_fn = find_wasi_start_function())) // wasm_runtime_lookup_wasi_start_function(m_module_inst)))
             {
                 return true;
             }
 #endif
-            else if ((m_fn = wasm_runtime_lookup_function(m_module_inst, "main", nullptr)))
+            else if ((m_fn = find_function("main", nullptr)))
             {
                 return true;
             }
-            else if ((m_fn = wasm_runtime_lookup_function(m_module_inst, "_main_argc_argv", nullptr)))
+            else if ((m_fn = find_function("_main_argc_argv", nullptr)))
             {
                 return true;
             }
-            else if ((m_fn = wasm_runtime_lookup_function(m_module_inst, "_main", nullptr)))
+            else if ((m_fn = find_function("_main", nullptr)))
             {
                 return true;
             }
         }
-        else if ((m_fn = wasm_runtime_lookup_function(m_module_inst, fn_name.c_str(), nullptr)))
+        else if ((m_fn = find_function(fn_name.c_str(), nullptr)))
         {
             cout << "Resolved function \"" << fn_name << "\"" << endl;
             return true;
         }
 
-        wasm_runtime_set_exception(m_module_inst, "Resolve entry point function failed");
+//        wasm_runtime_set_exception(m_module_inst, "Resolve entry point function failed");
+        m_compartment.CallCompartmentFunction("wasm_runtime_set_exception",
+            std::make_shared<CWasmCallRuntimeSetExceptionData>(m_module_inst, "Resolve entry point function failed")
+        );
+
         return false;
     }
 
@@ -174,19 +234,37 @@ public:
     ~CRunner()
     {
         if (m_exec_env)
-            wasm_runtime_destroy_exec_env(m_exec_env);
+        {
+            //wasm_runtime_destroy_exec_env(m_exec_env);
+            m_compartment.CallCompartmentFunction("wasm_runtime_destroy_exec_env",
+                std::make_shared<CWasmCallRuntimeDestroyExecEnvData>(m_exec_env)
+            );
+        }
 
         if (m_module_inst)
-            wasm_runtime_deinstantiate(m_module_inst);
+        {
+            //wasm_runtime_deinstantiate(m_module_inst);
+            m_compartment.CallCompartmentFunction("wasm_runtime_deinstantiate",
+                std::make_shared<CWasmCallRuntimeDeInstantiateData>(m_module_inst)
+            );
+        }
 
         if (m_module)
-            wasm_runtime_unload(m_module);
+        {
+            //wasm_runtime_unload(m_module);
+            m_compartment.CallCompartmentFunction("wasm_runtime_unload",
+                std::make_shared<CWasmCallRuntimeUnloadData>(m_module)
+            );
+        }
 
-        wasm_runtime_destroy();
+        // wasm_runtime_destroy();
+        m_compartment.CallCompartmentFunction("wasm_runtime_destroy",
+            std::make_shared<CWasmCallRuntimeDestroy>()
+        );
     }
 
     explicit CRunner(const CCompartmentLibs *plibs, vector<char>& module_buff, const string& fn_name,
-        int64 argc = 0, char* argv[] = nullptr) : m_plibs{ plibs }
+        int64 argc = 0, char* argv[] = nullptr) : m_plibs{ plibs }, m_compartment{plibs, CCompartment::CompartmentId::kCallFuncCompartment, CALL_FUNC_STACK_SIZE, CALL_FUNC_SEAL_ID }
     {
         bool result = setup();
 
@@ -222,11 +300,8 @@ public:
 
         cout << "CallFuncNoReturn(): args prepared, call wasm_runtime_call_wasm_a()..." << endl;
 
-        // Build compartment
-        auto compartment = CCompartment(m_plibs, CCompartment::CompartmentId::kCallFuncCompartment, CALL_FUNC_STACK_SIZE, CALL_FUNC_SEAL_ID);
-
         // Call with built data
-        bool result = (bool)compartment.CallCompartmentFunction("wasm_runtime_call_wasm_a",
+        bool result = (bool)m_compartment.CallCompartmentFunction("wasm_runtime_call_wasm_a",
             std::make_shared<CWasmCallCompartmentData>(
                 m_exec_env,
                 m_fn,
@@ -235,7 +310,6 @@ public:
                 args.size(),
                 args.data() ? args.data() : nullptr)
         );
-
 #if 0
         // Call the WASM func...
         CWasmCallFuncCompartment comp{m_plibs->GetDllSymbolByName("wasm_runtime_call_wasm_a"),
@@ -257,6 +331,10 @@ public:
         return false;
     }
 };
+
+constexpr size_t CRunner::EXCEPTION_ARR_SIZE;
+constexpr size_t CRunner::STACK_SIZE;
+constexpr size_t CRunner::HEAP_SIZE;
 
 
 // Call this to load libs when cap manager starts
@@ -297,6 +375,7 @@ static bool lib_restore_and_end(CCompartmentLibs* plibs)
 #endif
 }
 
+#if 0
 static CCompartmentLibs* g_plib = nullptr;
 
 /* Until we are running all WASM functions in the compartment, patch up native symbols to use the one from the compartment */
@@ -326,7 +405,7 @@ extern "C" void patchup_native_symbols_caps(NativeSymbol * p_natives, uint32 num
         
     }
 }
-
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -353,9 +432,6 @@ int main(int argc, char *argv[])
         return exitcode;
     }
 
-    // Enable all logging
-    bh_log_set_verbose_level(LOG_LEVEL);
-
     fin.seekg(0, std::ios::end);
     auto sz = fin.tellg();
     fin.seekg(0, std::ios::beg);
@@ -371,6 +447,7 @@ int main(int argc, char *argv[])
 
     string fn_name(argc == 3 ? "" : argv[3]);
 
+    // bh_log_set_verbose_level(LOG_LEVEL);
     try {
         // Do lib fixup
         CCompartmentLibs* plibs = nullptr;
@@ -380,7 +457,7 @@ int main(int argc, char *argv[])
         }
 
         // Save to global - HACK
-        g_plib = plibs;
+        // g_plib = plibs;
 
         cout << "Lib loaded, WAMR Initialising..." << endl;
 
@@ -392,9 +469,9 @@ int main(int argc, char *argv[])
         if (!argc)
             argv = nullptr;
 
-        CRunner runner{ plibs, buff, fn_name, argc, argv };
+        auto runner = new CRunner{ plibs, buff, fn_name, argc, argv };
 
-        if (runner.CallFuncNoReturn(argc, argv))
+        if (runner->CallFuncNoReturn(argc, argv))
         {
             cout << "PASSED" << endl;
             exitcode = 0;
@@ -404,7 +481,9 @@ int main(int argc, char *argv[])
             cout << "FAILED during CallFuncNoReturn()" << endl;
         }
 
-        g_plib = nullptr;
+        delete runner;
+
+        // g_plib = nullptr;
 
         if (!lib_restore_and_end(plibs))
         {
