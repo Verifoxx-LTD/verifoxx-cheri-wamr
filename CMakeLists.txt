@@ -12,7 +12,12 @@ if (NOT DEFINED WAMR_BUILD_PLATFORM)
     message(FATAL_ERROR "When using cmake on root you must define WAMR_BUILD_PLATFORM")
 endif ()
 
-if ( (DEFINED WAMRC_TOOL) AND (WAMRC_TOOL) )
+#### NOTE: This version builds cheri-cap-mgr by default!
+
+if ( (NOT DEFINED CAP_MGR) OR (CAP_MGR) )
+	add_subdirectory(verifoxx-cheri-cap-mgr)
+	
+elseif ( (DEFINED WAMRC_TOOL) AND (WAMRC_TOOL) )
     add_subdirectory(wamr-compiler)
 
 elseif ( (DEFINED WAMR_EXTERNREF_APP) AND (WAMR_EXTERNREF_APP) )
@@ -30,5 +35,3 @@ elseif ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
 else ()
     add_subdirectory(frontend)
 endif ()
-
-
