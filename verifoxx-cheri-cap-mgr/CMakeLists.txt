@@ -338,9 +338,11 @@ target_sources(${PROJECT_NAME} PRIVATE
     "CRelocationTable.cpp"
     "CCompartmentLibs.h"
     "CCompartmentLibs.cpp"
+    "CWamrProxy.h"
     "link_map_internal/linkmap.h"
     "link_map_internal/link-internal.h"
-    "common/CCompartmentData.h")
+    "common/CCompartmentData.h"
+)
 
 if (CAPMGR_BUILD_STATIC)
 
