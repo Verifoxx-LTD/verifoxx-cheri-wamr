@@ -277,16 +277,12 @@ add_library (${WAMR_LIB} SHARED ${WAMR_RUNTIME_LIB_SOURCE}
 
 target_include_directories(${WAMR_LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# vmlib not needed - WAMR only in DLL now
-#add_library(vmlib ${WAMR_RUNTIME_LIB_SOURCE})
+# Note that static vmlib not needed - WAMR only in DLL now
 
 add_dependencies(${PROJECT_NAME} ${WAMR_LIB})
 
 set_target_properties (${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON LINKER_LANGUAGE CXX)
 set_property(TARGET ${PROJECT_NAME}  PROPERTY CXX_STANDARD 14)
-
-# Temporary hack for native symbol patchup, only when running in exe not lib
-# target_compile_definitions(vmlib PUBLIC PATCHUP_NATIVE_SYMBOLS_HACK)
 
 # Cap manager static build or not
 if (CAPMGR_BUILD_STATIC)
@@ -307,13 +303,8 @@ if (WAMR_BUILD_FAST_INTERP AND CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # WAMR lib is built with RPATH so dependencies can be found
-#target_link_options(${WAMR_LIB} BEFORE PRIVATE "-nostdlib" "-L${CHERI_MUSL_TOOLCHAIN_DIR}/lib" "-Wl,--image-base=0x40000000" -static) # -static-libstdc++ -static-libgcc -static)
 target_link_options(${WAMR_LIB} BEFORE PRIVATE -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
 target_link_libraries (${WAMR_LIB} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
-
-#target_link_libraries (${WAMR_LIB} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -static-libstdc++ -static-libgcc -Wl,-Bstatic,-ldl -Wl,-Bstatic,-lpthread -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
-#target_link_libraries (${WAMR_LIB} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -Wl,-Bstatic,-lc++ -Wl,-Bstatic,-lc++abi -Wl,-Bstatic,-lunwind -Wl,-Bstatic,-ldl -Wl,-Bstatic,-lpthread -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
-#"-Wl,--gc-sections" "-nostdlib" "-L${CHERI_MUSL_TOOLCHAIN_DIR}/lib" -lc -lc++ -lc++abi -lunwind
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -338,19 +329,17 @@ target_sources(${PROJECT_NAME} PRIVATE
     "CRelocationTable.cpp"
     "CCompartmentLibs.h"
     "CCompartmentLibs.cpp"
+    "CWamrProxy.h"
     "link_map_internal/linkmap.h"
     "link_map_internal/link-internal.h"
-    "common/CCompartmentData.h")
+    "common/CCompartmentData.h"
+)
 
 if (CAPMGR_BUILD_STATIC)
-
-# Remove dependency on WAMR code
     target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc)
-#    target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -lpthread -ldl -lm -lc -static)
     target_link_libraries(${PROJECT_NAME} -lpthread -ldl -lm -lc -static)
 else ()
     target_link_options(${PROJECT_NAME} BEFORE PRIVATE ${LINK_OPTIONS_SETTINGS} -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
-#    target_link_libraries(${PROJECT_NAME} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} vmlib -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
     target_link_libraries(${PROJECT_NAME} -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
 endif ()
 
