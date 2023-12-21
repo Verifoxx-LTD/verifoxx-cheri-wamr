@@ -33,8 +33,8 @@ typedef enum
     WAMRCall_callDestroy
 } WamrCall_t;
 
-
-#include <functional>
+// Base class for any WAMR function data
+// Contains needed function pointers and a dervied type ID to determine which underlying function to call
 class alignas(__BIGGEST_ALIGNMENT__) CCompartmentData
 {
 public:
@@ -346,51 +346,4 @@ public:
     {}
 };
 
-
-/*
-DONE -> void bh_log_set_verbose_level(uint32 level);
-DONE -> void wasm_runtime_set_exception(wasm_module_inst_t module_inst, const char *exception);
-DONE -> wasm_function_inst_t wasm_runtime_lookup_wasi_start_function(wasm_module_inst_t module_inst);
-DONE -> void wasm_runtime_set_wasi_args(wasm_module_t module,
-                           const char *dir_list[], uint32_t dir_count,
-                           const char *map_dir_list[], uint32_t map_dir_count,
-                           const char *env[], uint32_t env_count,
-                           char *argv[], int argc);
-
-DONE -> void wasm_runtime_set_wasi_addr_pool(wasm_module_t module, const char *addr_pool[],
-                                uint32_t addr_pool_size);
-
-DONE -> void wasm_runtime_set_wasi_ns_lookup_pool(wasm_module_t module, const char *ns_lookup_pool[],
-                                     uint32_t ns_lookup_pool_size);
-
-
-DONE -> void wasm_runtime_destroy_exec_env(wasm_exec_env_t exec_env);
-DONE -> void wasm_runtime_deinstantiate(wasm_module_inst_t module_inst);
-DONE -> void wasm_runtime_destroy();
-void
-wasm_runtime_unload(wasm_module_t module);
-
-DONE -> bool wasm_runtime_full_init(RuntimeInitArgs *init_args)
-
-DONE -> wasm_module_t wasm_runtime_load(uint8_t *buf, uint32_t size,
-                  char *error_buf, uint32_t error_buf_size);
-
-
-DONE -> wasm_module_inst_t wasm_runtime_instantiate(const wasm_module_t module,
-                         uint32_t default_stack_size, uint32_t host_managed_heap_size,
-                         char *error_buf, uint32_t error_buf_size);
-
-DONE -> wasm_exec_env_t wasm_runtime_create_exec_env(wasm_module_inst_t module_inst,
-                             uint32_t stack_size);
-
-
-DONE -> wasm_function_inst_t wasm_runtime_lookup_function(wasm_module_inst_t const module_inst,
-                             const char *name, const char *signature);
-
-
-*/
-
-
 #endif /* _COMPARTMENT_DATA_H__ */
-
-

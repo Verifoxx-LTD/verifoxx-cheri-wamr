@@ -71,32 +71,8 @@ private:
 
     const CCompartmentLibs* m_plibs;
 
-    CWamrProxy m_proxy;// compartment;
+    CWamrProxy m_proxy;
 
-#if 0
-    template<template <typename ...Args> typename T, typename ...Args>
-    uintptr_t CallWamr(const std::string fn_name, Args&& ...args)
-    {
-        return m_compartment.CallCompartmentFunction(fn_name,
-            std::make_shared< T <Args...> >(std::forward<Args>(args)...)
-        );
-    }
-
-    template <typename T, typename... Args>
-    uintptr_t CallWamrFn(const std::string& fn_name, Args&&... args)
-    {
-        return m_compartment.CallCompartmentFunction(fn_name,
-            std::make_shared<T>(std::forward<Args>(args)...)
-        );
-
-    }
-
-    template<typename... Args>
-    void bh_log_set_verbose_level(Args... args)
-    {
-        CallWamrFn<CWasmCallLogSetVerboseLevelData>(std::string(__func__), args...);
-    }
-#endif
     // Setup WAMR environment
     bool setup()
     {
@@ -265,23 +241,12 @@ public:
             0,
             nullptr,
             args.size(),
-            args.data() ? args.data() : nullptr);
-#if 0
-        // Call the WASM func...
-        CWasmCallFuncCompartment comp{m_plibs->GetDllSymbolByName("wasm_runtime_call_wasm_a"),
-            m_exec_env,
-            m_fn,
-            0,
-            nullptr,
-            args.size(),
             args.data() ? args.data() : nullptr
-        };
+        );
 
-        bool result = comp.CallCompartment(m_plibs->GetDllSymbolByName("CompartmentUnwrap"));
-#endif
         if (result)
         {
-            cout << "CallCompartment() succeeds!" << endl;
+            cout << "wasm_runtime_call_wasm_a() succeeds!" << endl;
             return true;
         }
         return false;
@@ -331,38 +296,6 @@ static bool lib_restore_and_end(CCompartmentLibs* plibs)
 #endif
 }
 
-#if 0
-static CCompartmentLibs* g_plib = nullptr;
-
-/* Until we are running all WASM functions in the compartment, patch up native symbols to use the one from the compartment */
-extern "C" void patchup_native_symbols_caps(NativeSymbol * p_natives, uint32 num, const char *prefix)
-{
-    // For the compartmentlibs instance, use the global saved version TEMPORARY HACK
-    const CCompartmentLibs* plibs{ g_plib };
-
-    Capability basecap(cheri_ddc_get());
-
-    for (uint32 i = 0; i < num; ++i)
-    {
-        // Patch up symb as needed - add prefix to the name
-        string symb_name{ prefix };
-        symb_name += p_natives[i].symbol;
-
-        void *symb = plibs->ResolveSymbolAddr(symb_name, basecap);
-        if (symb)
-        {
-            p_natives[i].func_ptr = symb;
-            cout << "Patched up \"" << p_natives[i].symbol << "\" new addr=" << Capability(p_natives[i].func_ptr) << endl;
-        }
-        else
-        {
-            cout << "Not patched up \"" << p_natives[i].symbol << "\"" << endl;
-        }
-        
-    }
-}
-#endif
-
 int main(int argc, char *argv[])
 {
     int exitcode = -1;
@@ -403,7 +336,6 @@ int main(int argc, char *argv[])
 
     string fn_name(argc == 3 ? "" : argv[3]);
 
-    // bh_log_set_verbose_level(LOG_LEVEL);
     try {
         // Do lib fixup
         CCompartmentLibs* plibs = nullptr;
@@ -411,9 +343,6 @@ int main(int argc, char *argv[])
         {
             return -1;
         }
-
-        // Save to global - HACK
-        // g_plib = plibs;
 
         cout << "Lib loaded, WAMR Initialising..." << endl;
 
@@ -438,8 +367,6 @@ int main(int argc, char *argv[])
         }
 
         delete runner;
-
-        // g_plib = nullptr;
 
         if (!lib_restore_and_end(plibs))
         {

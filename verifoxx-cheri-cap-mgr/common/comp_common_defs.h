@@ -15,10 +15,12 @@
 extern "C"
 {
 #endif
-    // Fn pointer for compartment entry fn which is a C function
+    /* Fn Ptr for the unwrap function */
     typedef void(*CompUnwrapFnPtr)(void*);
 
-    // Fn pointer for the target WAMR functions
+    /* Function pointer typedefs for all WAMR functions called from capability manager
+    * C not C++ typedefs
+    */
     typedef bool(*FnPtr_wasm_runtime_call_wasm_a)(WASMExecEnv*,
         WASMFunctionInstanceCommon*,
         uint32, wasm_val_t*,
@@ -66,23 +68,6 @@ extern "C"
 
     // Declare the return function in the compartment
     void CompartmentReturn(CompExitAsmFnPtr fp, uintptr_t return_arg);
-
-    // The test
-    uint32_t do_add_test(uint32_t a, uint32_t b);
-
-    // "packed" params for the call wasm compartment
-    struct CompartmentWasmCall_t
-    {
-        FnPtr_wasm_runtime_call_wasm_a fp;
-        WASMExecEnv* exec_env;
-        WASMFunctionInstanceCommon* function;
-        uint32 num_results;
-        wasm_val_t* results;
-        uint32 num_args;
-        wasm_val_t* args;
-        CompExitAsmFnPtr comp_exit_fp;   // Function pointer to the return function
-    } __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
-
 
 #ifdef __cplusplus
 }
