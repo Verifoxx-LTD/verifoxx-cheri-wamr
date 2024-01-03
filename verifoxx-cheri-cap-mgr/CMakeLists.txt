@@ -330,6 +330,7 @@ target_sources(${PROJECT_NAME} PRIVATE
     "CCompartmentLibs.h"
     "CCompartmentLibs.cpp"
     "CWamrProxy.h"
+    "CCapMgrLogger.h"
     "link_map_internal/linkmap.h"
     "link_map_internal/link-internal.h"
     "common/CCompartmentData.h"
