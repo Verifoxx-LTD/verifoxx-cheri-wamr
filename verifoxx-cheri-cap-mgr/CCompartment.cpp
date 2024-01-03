@@ -43,7 +43,7 @@ CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, 
     }
 
     // Make a restricted capability from our PCC (TO DO - FOR NOW) and the above address
-    m_comp_entry = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
+    m_comp_entry = Capability(getauxptr(AT_CHERI_EXEC_RX_CAP))
         .SetAddress(unwrap_fn)
         .SetPerms(kCompartmentExecPerms)
         .SEntry();
@@ -117,7 +117,7 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
     }
 
     // Lookup and then build a capability for the WAMR function
-    void* wamr_fn_void = Capability(cheri_ddc_get()) /* cheri_pcc_get()) */
+    void* wamr_fn_void = Capability(getauxptr(AT_CHERI_EXEC_RX_CAP))
         .SetAddress(wamr_fn)
         .SetPerms(kCompartmentExecPerms)
         .SEntry();

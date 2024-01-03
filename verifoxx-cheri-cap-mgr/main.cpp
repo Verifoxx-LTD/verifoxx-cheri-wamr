@@ -30,6 +30,8 @@
 
 #include "CWamrProxy.h"
 
+#include "CCapMgrLogger.h"
+using namespace CapMgr;
 using namespace std;
 
 static constexpr uint32 LOG_LEVEL = BH_LOG_LEVEL_VERBOSE;
@@ -299,6 +301,11 @@ static bool lib_restore_and_end(CCompartmentLibs* plibs)
 int main(int argc, char *argv[])
 {
     int exitcode = -1;
+
+    Log::Level() = DEBUG;
+    L_(VERBOSE) << "not logged";
+    L_(DEBUG) << "logged";
+    L_(ERROR) << "Also logged";
 
     cout << endl << argv[0] << " : Starting up..." << endl;
 

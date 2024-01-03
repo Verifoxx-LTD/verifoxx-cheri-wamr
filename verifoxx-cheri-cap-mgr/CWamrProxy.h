@@ -133,3 +133,4 @@ public:
 };
 
 #endif /* _CWAMRPROXY_H__ */
+
