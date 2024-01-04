@@ -17,7 +17,7 @@ namespace CapMgr
         char buffer[11];
         time_t t;
         time(&t);
-        tm r = { 0 };
+        tm r;
         strftime(buffer, sizeof(buffer), "%X", localtime_r(&t, &r));
         struct timeval tv;
         gettimeofday(&tv, 0);
@@ -28,14 +28,14 @@ namespace CapMgr
 
     enum TLogLevel
     {
-        FATAL = 0,
+        ALWAYS = 0,
         ERROR,
         WARNING,
         DEBUG,
         VERBOSE
     };
 
-    std::array<const char*, VERBOSE - FATAL + 1> logLevelString = { "FATAL", "ERROR", "WARNING", "DEBUG", "VERBOSE" };
+    constexpr std::array<const char*, VERBOSE - ALWAYS + 1> logLevelString = { "ALWAYS", "ERROR", "WARNING", "DEBUG", "VERBOSE" };
 
     template <typename T>
     class LogBase
@@ -47,6 +47,7 @@ namespace CapMgr
 
         virtual ~LogBase()
         {
+            
             os << std::endl;
             T::Output(os.str());
         }

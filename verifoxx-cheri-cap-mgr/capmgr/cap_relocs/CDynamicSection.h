@@ -7,8 +7,11 @@
 #include <map>
 #include <iostream>
 
+#include "CCapMgrLogger.h"
 #include "shared_object_common.h"
 #include "Range.h"
+
+using namespace CapMgr;
 
 // CDynamicSection: The shared objects dynamic section map, where we map
 // by tag to absolute address.
@@ -58,7 +61,7 @@ public:
     {
         for (const auto& entry : dynsec.m_secmap)
         {
-            std::cout << "{0x" << std::dec << entry.first << "->0x" << std::hex << entry.second << "}" << std::endl;
+            L_(VERBOSE) << "{0x" << std::dec << entry.first << "->0x" << std::hex << entry.second << "}";
         }
 
         return ostr;

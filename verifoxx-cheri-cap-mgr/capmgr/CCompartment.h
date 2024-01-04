@@ -6,8 +6,8 @@
 #include <exception>
 #include <memory>
 
-#include "common/comp_common_defs.h"
-#include "common/CCompartmentData.h"
+#include "comp_common_defs.h"
+#include "CCompartmentData.h"
 #include "CCompartmentLibs.h"
 
 // Comp perms
@@ -49,8 +49,8 @@ public:
     };
 
 private:
-    // Unwrap function which in the compartment which we need to call
-    static constexpr const char *UNWRAP_DEFAULT_FUNCTION = "CompartmentUnwrap";
+    // Entry point in the compartment which we need to call - always a single trampoline address
+    static constexpr const char* COMPARTMENT_ENTRY_POINT_FUNCTION = "CompartmentEntryPoint";
     struct CompartmentData_t    m_comp_data;
     const CCompartmentLibs  *m_comp_libs;
     CompartmentId               m_id;
@@ -64,18 +64,11 @@ private:
 
 public:
     // Create compartment with needed mappings and optionally name of the unwrap function
-    explicit CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,
-                            const std::string comp_unwrap_function = UNWRAP_DEFAULT_FUNCTION);
+    explicit CCompartment(const CCompartmentLibs* comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,
+        const std::string comp_entry_trampoine_function = COMPARTMENT_ENTRY_POINT_FUNCTION);
 
     // Call into restricted, give the compartment data to pass for the function and the name of the function
     uintptr_t CallCompartmentFunction(const std::string &fn_to_call, const std::shared_ptr<CCompartmentData> &comp_fn_data);
-
-#if 0
-    bool wasm_runtime_call_wasm_a(wasm_exec_env_t exec_env,
-        wasm_function_inst_t function,
-        uint32_t num_results, wasm_val_t results[],
-        uint32_t num_args, wasm_val_t* args);
-#endif
 };
 
 #endif /* _CCOMPARTMENT_H__ */

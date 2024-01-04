@@ -5,18 +5,20 @@
 #include <type_traits>
 #include <cheriintrin.h>
 
+#include "CCapMgrLogger.h"
+
 #include "CCompartment.h"
 #include "comp_caller.h"
 #include "CCapability.h"
 
 
 using namespace std;
-
+using namespace CapMgr;
 
 CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,
-                const std::string comp_unwrap_function) : m_comp_libs(comp_libs), m_id(id)
+                const std::string comp_entry_trampoine_function) : m_comp_libs(comp_libs), m_id(id)
 {
-    cout << "CCompartment: Constructing compartment id = " << 
+    L_(DEBUG) << "CCompartment: Constructing compartment id = " <<
         static_cast<typename underlying_type<CompartmentId>::type>(id) << endl;
     
     m_comp_data.csp = CreateStack(stack_size);
@@ -35,16 +37,16 @@ CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, 
         .SetAddress(reinterpret_cast<void*>(seal_id))
         .SetPerms(kCompartmentSealerPerms);
                   
-    // Lookup the compartment's entry function
-    void *unwrap_fn = m_comp_libs->GetDllSymbolByName(comp_unwrap_function);
-    if (!unwrap_fn)
+    // Lookup the compartment's entry trampoline function
+    void *entry_fn_ptr = m_comp_libs->GetDllSymbolByName(comp_entry_trampoine_function);
+    if (!entry_fn_ptr)
     {
-        throw CCompartmentException("Cannot find compartment unwrap function!");
+        throw CCompartmentException("Cannot find compartment entry point function!");
     }
 
-    // Make a restricted capability from our PCC (TO DO - FOR NOW) and the above address
+    // Make a restricted capability from our PCC and the above capability unwrap function
     m_comp_entry = Capability(getauxptr(AT_CHERI_EXEC_RX_CAP))
-        .SetAddress(unwrap_fn)
+        .SetBoundsAndAddress(Capability(entry_fn_ptr))
         .SetPerms(kCompartmentExecPerms)
         .SEntry();
 
@@ -67,7 +69,7 @@ void* CCompartment::CreateStack(uint32_t stack_size)
         throw CCompartmentException("No memory for stack!");
     }
 
-    cout << "Mapped stack at address" << cheri_address_get(mapped_stack) << endl;
+    L_(VERBOSE) << "Mapped stack at address" << cheri_address_get(mapped_stack);
 
     // The stack grows down, so use the actual size for TOS.  Leave a 16 byte guard though and align down.
     uint8_t* tos = &reinterpret_cast<uint8_t*>(mapped_stack)[cheri_align_down(mmap_size - 32, __BIGGEST_ALIGNMENT__)];
@@ -77,7 +79,7 @@ void* CCompartment::CreateStack(uint32_t stack_size)
         .SetAddress(tos)
         .SetPerms(kCompartmentDataPerms);
 
-    cout << "Top of stack: [" << top_of_stack << "]" << endl;
+    L_(VERBOSE) << "Top of stack: [" << top_of_stack << "]";
 
     return top_of_stack;
 }
@@ -107,7 +109,7 @@ void* CCompartment::RestrictAndSeal(CCompartmentData* comp_fn_data)
 // Seal the compartments data params
 uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, const std::shared_ptr<CCompartmentData> &comp_fn_data)
 {
-    cout << "CallCompartment: Calling ASM to call into restricted" << endl;
+    L_(DEBUG) << "CallCompartment: Calling ASM to call into restricted";
 
     // Lookup the compartment's entry function
     void* wamr_fn = m_comp_libs->GetDllSymbolByName(fn_to_call);

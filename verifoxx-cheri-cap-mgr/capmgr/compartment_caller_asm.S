@@ -1,4 +1,4 @@
-#include "common/comp_common_asm.h"
+#include "comp_common_asm.h"
 
 #define comp_csp		c25
 #define comp_ddc		c26

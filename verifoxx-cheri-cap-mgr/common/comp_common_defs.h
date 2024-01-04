@@ -9,7 +9,7 @@
 
 #include "wasm.h"
 #include "wasm_runtime_common.h"
-#include "common/comp_common_asm.h"
+#include "comp_common_asm.h"
 
 #ifdef __cplusplus
 extern "C"

@@ -25,7 +25,7 @@
 
 #include "CCapability.h"
 #include "CCompartment.h"
-#include "common/CCompartmentData.h"
+#include "CCompartmentData.h"
 #include "CCompartmentLibs.h"
 
 #include "CWamrProxy.h"
@@ -34,7 +34,8 @@
 using namespace CapMgr;
 using namespace std;
 
-static constexpr uint32 LOG_LEVEL = BH_LOG_LEVEL_VERBOSE;
+
+static constexpr uint32 LOG_LEVEL = BH_LOG_LEVEL_DEBUG;
 static constexpr uint32 STACK_SIZE = 64 * 1024;
 static constexpr uint32 HEAP_SIZE = 16 * 1024;
 static constexpr char ADDR_POOL[] = "0.0.0.0/0";
@@ -103,7 +104,7 @@ private:
 
         if (!(m_module = m_proxy.wasm_runtime_load( (uint8*)module_buff.data(), module_buff.size(), m_ex_buff.data(), m_ex_buff.size())))
         {
-            cerr << "Failed to create module: " << m_ex_buff.data() << endl;
+            L_(ERROR) << "Failed to create module: " << m_ex_buff.data();
             return false;
         }
 
@@ -121,7 +122,7 @@ private:
     {
         if (!(m_module_inst = m_proxy.wasm_runtime_instantiate(m_module, STACK_SIZE, HEAP_SIZE, m_ex_buff.data(), m_ex_buff.size())))
         {
-            cerr << "Failed to instantiate module" << endl;
+            L_(ERROR) << "Failed to instantiate module";
             return false;
         }
 
@@ -133,7 +134,7 @@ private:
     {
         if (!(m_exec_env = m_proxy.wasm_runtime_create_exec_env(m_module_inst, STACK_SIZE)))
         {
-            cerr << "Failed create exec env" << endl;
+            L_(ERROR) << "Failed create exec env";
             return false;
         }
 
@@ -168,7 +169,7 @@ private:
         }
         else if ((m_fn = m_proxy.wasm_runtime_lookup_function(m_module_inst, fn_name.c_str(), nullptr)))
         {
-            cout << "Resolved function \"" << fn_name << "\"" << endl;
+            L_(DEBUG) << "Resolved function \"" << fn_name << "\"";
             return true;
         }
 
@@ -221,7 +222,7 @@ public:
         }
         else
         {
-            cout << "Setup ok" << endl;
+            L_(DEBUG) << "Setup ok";
         }
     }
 
@@ -235,7 +236,7 @@ public:
             args.push_back(arg);
         }
 
-        cout << "CallFuncNoReturn(): args prepared, call wasm_runtime_call_wasm_a()..." << endl;
+        L_(ALWAYS) << "CallFuncNoReturn(): args prepared, call wasm_runtime_call_wasm_a()...";
 
         bool result = m_proxy.wasm_runtime_call_wasm_a(
             m_exec_env,
@@ -248,7 +249,7 @@ public:
 
         if (result)
         {
-            cout << "wasm_runtime_call_wasm_a() succeeds!" << endl;
+            L_(ALWAYS) << "wasm_runtime_call_wasm_a() succeeds!";
             return true;
         }
         return false;
@@ -273,10 +274,13 @@ static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plib
 #endif
     plibs = new CCompartmentLibs{ libname, rwcap, fixup_cap, load_new };
 
-    cout << "Dump libs phdrs: " << *plibs << endl;
-    cout << "Dump reloc tables: " << plibs->DumpRelocTables() << endl;
-    cout << "Do Fixups..." << std::endl;
-
+    if (Log::Level() == VERBOSE)
+    {
+        L_(VERBOSE) << "Dump libs phdrs: " << *plibs;
+        L_(VERBOSE) << "Dump reloc tables: " << plibs->DumpRelocTables();
+    }
+    
+    L_(DEBUG) << "Do capability relocation fixups...";
     return plibs->DoAllLibCapFixups();
 }
 
@@ -284,15 +288,16 @@ static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plib
 // @todo: make it part of CCompartmentLibs destructor
 static bool lib_restore_and_end(CCompartmentLibs* plibs)
 {
-    cout << "Revert Fixups..." << std::endl;
-
 #if CAPMGR_BUILT_STATIC_ENABLE
-    cout << "Nothing to do with static build" << endl;
+    L_(VERBOSE) << "No action to revert fixups needed for static build";
     return true;
 #else
+
+    L_(DEBUG) << "Revert capability relocation fixups...";
+
     auto result = plibs->DoAllLibCapFixups(false);
 
-    cout << "Delete the libs and dlclose()" << std::endl;
+    L_(DEBUG) << "Delete the libs and dlclose()";
     delete plibs;
     return result;
 #endif
@@ -303,28 +308,24 @@ int main(int argc, char *argv[])
     int exitcode = -1;
 
     Log::Level() = DEBUG;
-    L_(VERBOSE) << "not logged";
-    L_(DEBUG) << "logged";
-    L_(ERROR) << "Also logged";
 
-    cout << endl << argv[0] << " : Starting up..." << endl;
+    L_(ALWAYS) << endl << argv[0] << " : Starting up...";
 
     if (argc < 3) {
-        cerr << "Usage: " << argv[0]
-             << "<libiwasm.so> <wasm|aot-file> [<fn_to_run_or_default>] [param1 param2 "
-             <<   "param3...]"
-             << endl;
+        L_(ALWAYS) << "Usage: " << argv[0]
+            << "<libiwasm.so> <wasm|aot-file> [<fn_to_run_or_default>] [param1 param2 "
+            << "param3...]";
         return exitcode;
     }
 
     string libname{ argv[1] };
 
-    cout << "Will load DLL " << libname << endl;
+    L_(ALWAYS) << "Will load DLL " << libname;
 
-    cout << "Loading \"" << argv[2] << "\"..." << endl;
+    L_(ALWAYS) << "Loading WASM file \"" << argv[2] << "\"...";
     ifstream fin(argv[2], ios::in | ios::binary | ios::ate);
     if (!fin.good()) {
-        cerr << "Cannot find file or process it: " << argv[2] << endl;
+        L_(ERROR) << "Cannot find file or process it: " << argv[2];
         return exitcode;
     }
 
@@ -335,7 +336,7 @@ int main(int argc, char *argv[])
     vector<char> buff(sz);
 
     if (!fin.read(buff.data(), sz)) {
-        cerr << "Failed to read in WASM file " << argv[2] << endl;
+        L_(ERROR) << "Failed to read in WASM file " << argv[2];
         fin.close();
         return exitcode;
     }
@@ -351,7 +352,7 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        cout << "Lib loaded, WAMR Initialising..." << endl;
+        L_(DEBUG) << "Lib loaded, WAMR Initialising...";
 
         // Skip past the prog name, library, loaded file arg and optionally the function arg
         argc-=3, argv+=3;
@@ -365,12 +366,12 @@ int main(int argc, char *argv[])
 
         if (runner->CallFuncNoReturn(argc, argv))
         {
-            cout << "PASSED" << endl;
+            L_(ALWAYS) << "PASSED";
             exitcode = 0;
         }
         else
         {
-            cout << "FAILED during CallFuncNoReturn()" << endl;
+            L_(ALWAYS) << "FAILED during CallFuncNoReturn()";
         }
 
         delete runner;
@@ -381,9 +382,9 @@ int main(int argc, char *argv[])
         }
 
     } catch (CRunnerException &ex) {
-        cerr << "Exception while processing: " << ex.what() << endl;
+        L_(ERROR) << "Exception while processing: " << ex.what();
     }
 
-    cout << "*** End ***" << endl << endl;
+    L_(ALWAYS) << "*** End ***" << endl;
     return exitcode;
 }

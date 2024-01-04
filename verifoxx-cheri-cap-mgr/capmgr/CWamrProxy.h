@@ -9,8 +9,8 @@
 #include "wasm_c_api.h"
 #include "wasm_runtime_common.h"
 #include "CCompartment.h"
-#include "common/comp_common_defs.h"
-#include "common/CCompartmentData.h"
+#include "comp_common_defs.h"
+#include "CCompartmentData.h"
 
 class CWamrProxy
 {

@@ -4,9 +4,13 @@
 #include <vector>
 #include <sstream>
 
+#include "CCapMgrLogger.h"
+
 #include "CSharedObject.h"
 #include "CCapMgrException.h"
 #include "CRelocationTable.h"
+
+using namespace CapMgr;
 
 void CSharedObject::Load(const Elf64_Phdr* phdrs, Elf64_Half num_hdrs, const Capability& fixup_cap)
 {
@@ -60,7 +64,7 @@ CDynamicSection CSharedObject::parseDynamicSection() const
     dyn_readonly = ((phdr_ref.p_flags & PF_W) == 0);
 #endif
 
-    std::cout << "parseDynamicSection: readonly flag=" << dyn_readonly << std::endl;
+    L_(DEBUG) << "parseDynamicSection: readonly flag=" << dyn_readonly;
 
     return CDynamicSection(m_base, phdr_ref.p_vaddr, phdr_ref.p_memsz, dyn_readonly);
 }
@@ -88,8 +92,8 @@ bool CSharedObject::ProtectBlock(const Elf64_Phdr& phdr, bool restore_original, 
 
     size_t sz = phdr.p_memsz + reinterpret_cast<ptrdiff_t>((block_start - block_aligned));
 
-    std::cout << "ProtectBlock: type=" << phdr.p_type << " vaddr_offset=0x" << std::hex << phdr.p_vaddr
-        << " size=0x" << phdr.p_memsz << " flags=0x" << phdr.p_flags << std::endl;
+    L_(VERBOSE) << "ProtectBlock: type=" << phdr.p_type << " vaddr_offset=0x" << std::hex << phdr.p_vaddr
+        << " size=0x" << phdr.p_memsz << " flags=0x" << phdr.p_flags;
 
     // Figure out the perms we need
     if (restore_original)
@@ -105,10 +109,10 @@ bool CSharedObject::ProtectBlock(const Elf64_Phdr& phdr, bool restore_original, 
             prot_required |= PROT_READ;
     }
 
-    std::cout << "call mprotect(" << Capability(block_aligned) << ", 0x" << sz << ", 0x" << prot_required << ")" << std::endl;
+    L_(VERBOSE) << "call mprotect(" << Capability(block_aligned) << ", 0x" << sz << ", 0x" << prot_required << ")";
     if (0 != mprotect(block_aligned, sz, prot_required))
     {
-        std::cout << "Block protect failed with error: " << strerror(errno) << std::endl;
+        L_(ERROR) << "Block mprotect failed with error: " << strerror(errno);
         return false;
     }
     return true;
@@ -177,10 +181,10 @@ bool CSharedObject::DoLibCapFixups(bool makeRestricted) const
     }
     catch (std::out_of_range&) {}
 
-    std::cout << "Make LOAD blocks writable" << std::endl;
+    L_(VERBOSE) << "Make LOAD blocks writable";
     if (!ProtectAllBlocks(PT_LOAD, false, PROT_READ | PROT_WRITE))
     {
-        std::cout << "Failed to mprotect blocks" << std::endl;
+        L_(ERROR) << "Failed to mprotect blocks";
         return false;
     }
 
@@ -190,7 +194,7 @@ bool CSharedObject::DoLibCapFixups(bool makeRestricted) const
         {
             if (!p_reloc_table->PatchCaps(unmodify_ranges, makeRestricted))
             {
-                std::cout << "Process table FAILED: " << *p_reloc_table << std::endl;
+                L_(ERROR) << "Process table FAILED: " << *p_reloc_table;
                 return false;
             }
         }
@@ -199,10 +203,10 @@ bool CSharedObject::DoLibCapFixups(bool makeRestricted) const
         }
     }
 
-    std::cout << "Make LOAD blocks restored to original access settings" << std::endl;
+    L_(VERBOSE) << "Make LOAD blocks restored to original access settings";
     if (!ProtectAllBlocks(PT_LOAD))
     {
-        std::cout << "Failed to mprotect blocks" << std::endl;
+        L_(ERROR) << "Failed to mprotect blocks";
         return false;
     }
 
