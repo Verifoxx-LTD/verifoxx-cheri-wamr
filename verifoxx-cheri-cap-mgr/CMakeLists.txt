@@ -272,10 +272,15 @@ add_library (${WAMR_LIB} SHARED ${WAMR_RUNTIME_LIB_SOURCE}
     "common/comp_common_defs.h"
     "common/comp_common_asm.h"
     "compartment/comp_entry.cpp"
+    "compartment/comp_entry_trampoline_asm.S"
     "common/CCompartmentData.h"
 )
 
-target_include_directories(${WAMR_LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(${WAMR_LIB} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/compartment
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils
+)
 
 # Note that static vmlib not needed - WAMR only in DLL now
 
@@ -306,34 +311,27 @@ endif()
 target_link_options(${WAMR_LIB} BEFORE PRIVATE -static-libstdc++ -static-libgcc -Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER})
 target_link_libraries (${WAMR_LIB} ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -Wl,-Bstatic,-lpthread -Wl,-Bstatic,-ldl -Wl,-Bdynamic,-lm -Wl,-Bdynamic,-lc)
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+include(${CMAKE_CURRENT_LIST_DIR}/macros.cmake)
+
+# Capmgr files
+ALL_FILES_AND_INC_FOLDERS(${CMAKE_CURRENT_SOURCE_DIR}/capmgr CAPMGR_FILES CAPMGR_INC_FOLDERS)
+
+# Utils files
+ALL_FILES_AND_INC_FOLDERS(${CMAKE_CURRENT_SOURCE_DIR}/utils UTILS_FILES UTILS_INC_FOLDERS)
+
+# Common files
+ALL_FILES_AND_INC_FOLDERS(${CMAKE_CURRENT_SOURCE_DIR}/common COMMON_FILES COMMON_INC_FOLDERS)
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CAPMGR_INC_FOLDERS}
+    ${UTILS_INC_FOLDERS}
+    ${COMMON_INC_FOLDERS}
+)
 
 target_sources(${PROJECT_NAME} PRIVATE
-    "main.cpp"
-    "CCompartment.h"
-    "CCompartment.cpp"
-    "CCapability.h"
-    "comp_caller.h"
-    "comp_caller.c"
-    "compartment_caller_asm.S"
-    "common/comp_common_defs.h"
-    "common/comp_common_asm.h"
-    "CSharedObject.cpp"
-    "CSharedObject.h"
-    "shared_object_common.h"
-    "CCapMgrException.h"
-    "Range.h"
-    "CDynamicSection.h"
-    "CDynamicSection.cpp"
-    "CRelocationTable.h"
-    "CRelocationTable.cpp"
-    "CCompartmentLibs.h"
-    "CCompartmentLibs.cpp"
-    "CWamrProxy.h"
-    "CCapMgrLogger.h"
-    "link_map_internal/linkmap.h"
-    "link_map_internal/link-internal.h"
-    "common/CCompartmentData.h"
+    ${CAPMGR_FILES}
+    ${UTILS_FILES}
+    ${COMMON_FILES}
 )
 
 if (CAPMGR_BUILD_STATIC)

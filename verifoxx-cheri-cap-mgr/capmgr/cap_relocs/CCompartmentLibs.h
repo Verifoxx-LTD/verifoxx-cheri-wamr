@@ -8,7 +8,7 @@
 #include <map>
 
 #include "shared_object_common.h"
-#include "common/comp_common_defs.h"
+#include "comp_common_defs.h"
 #include "CSharedObject.h"
 #include "CCapability.h"
 

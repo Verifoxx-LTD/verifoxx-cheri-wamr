@@ -1,7 +1,7 @@
 #ifndef _COMP_CALLER_H__
 #define _COMP_CALLER_H__
 
-#include "common/comp_common_defs.h"
+#include "comp_common_defs.h"
 
 #ifdef __cplusplus
 extern "C"

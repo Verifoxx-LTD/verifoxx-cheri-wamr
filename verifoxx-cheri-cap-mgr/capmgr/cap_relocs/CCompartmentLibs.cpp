@@ -4,6 +4,9 @@
 #include "CCompartmentLibs.h"
 #include "CCapMgrException.h"
 
+#include "CCapMgrLogger.h"
+using namespace CapMgr;
+
 #ifndef DT_THISPROCNUM
 #define DT_THISPROCNUM DT_AARCH64_NUM
 #endif
@@ -46,7 +49,7 @@ CCompartmentLibs::CCompartmentLibs(const std::string& so_name, const Capability 
         throw CCapMgrException("Did not load any shared libs from linkmap!");
     }
 
-    std::cout << "Loaded " << numloaded << " shared objects" << std::endl;
+    L_(DEBUG) << "Loaded " << numloaded << " shared objects";
 }
 
 
@@ -78,7 +81,7 @@ int CCompartmentLibs::ParseLinkMap(const std::string &so_name, const Capability 
 
         if (full_name.empty())
         {
-            std::cout << "Parsing link map skipping application entry" << std::endl;
+            L_(DEBUG) << "Parsing link map skipping application entry";
             
         }
         else
@@ -89,7 +92,7 @@ int CCompartmentLibs::ParseLinkMap(const std::string &so_name, const Capability 
             // If l_real is not equal link_map then reject if flagged, as would be the loader
             if ((cheri_address_get(internal_link_map) != cheri_address_get(internal_link_map->l_real)) && !m_include_loader)
             {
-                std::cout << "Rejecting lib=" << full_name << " as found ld.so" << std::endl;
+                L_(DEBUG) << "Rejecting lib=" << full_name << " as found ld.so";
             }
             else
             {
@@ -102,12 +105,12 @@ int CCompartmentLibs::ParseLinkMap(const std::string &so_name, const Capability 
                 // Reject if no headers
                 if ( phdr_num == 0 || phdr_ptr == nullptr)
                 {
-                    std::cout << "Rejecting lib=" << full_name << " as no valid phdrs" << std::endl;
+                    L_(DEBUG) << "Rejecting lib=" << full_name << " as no valid phdrs";
                 }
                 else
                 {
                     map_count++;
-                    std::cout << "Parsing lib=" << full_name << "..." << std::endl;
+                    L_(VERBOSE) << "Parsing lib=" << full_name << "...";
                     // Construct the .so and add it to our list
                     // Build the capability from the base address of the DLL
                     // Note: problem is the base won't give us write perms, so source from the parsed in cap
