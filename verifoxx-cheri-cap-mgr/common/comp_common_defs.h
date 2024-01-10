@@ -18,6 +18,10 @@ extern "C"
     /* Fn Ptr for the unwrap function */
     typedef void(*CompUnwrapFnPtr)(void*);
 
+    /* Fn Ptr for the callback service function */
+    typedef uintptr_t(*CompServiceCallbackFnPtr)(void*, void*);
+
+
     /* Function pointer typedefs for all WAMR functions called from capability manager
     * C not C++ typedefs
     */
@@ -68,6 +72,9 @@ extern "C"
 
     // Declare the return function in the compartment
     void CompartmentReturn(CompExitAsmFnPtr fp, uintptr_t return_arg);
+
+    // Declare the service callback function in the compartment
+    uintptr_t CompartmentServiceCallback(void* comp_data_ptr_void, void* args_data);
 
 #ifdef __cplusplus
 }

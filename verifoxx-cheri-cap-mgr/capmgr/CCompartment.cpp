@@ -10,7 +10,7 @@
 #include "CCompartment.h"
 #include "comp_caller.h"
 #include "CCapability.h"
-
+#include "capmgr_services.h"
 
 using namespace std;
 using namespace CapMgr;
@@ -36,7 +36,7 @@ CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, 
         .SetBounds(seal_id, seal_id + 1)
         .SetAddress(reinterpret_cast<void*>(seal_id))
         .SetPerms(kCompartmentSealerPerms);
-                  
+    
     // Lookup the compartment's entry trampoline function
     void *entry_fn_ptr = m_comp_libs->GetDllSymbolByName(comp_entry_trampoine_function);
     if (!entry_fn_ptr)
@@ -51,9 +51,16 @@ CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, 
         .SEntry();
 
     // Return function in executive
-    CompExitAsmFnPtr exit_fn = CompartmentExit;
-    void* exit_fn_void = Capability(reinterpret_cast<uintptr_t>(exit_fn));
+    void* exit_fn_void = Capability(reinterpret_cast<uintptr_t>(&CompartmentSwitchReturn));
     m_exit_fn = reinterpret_cast<CompExitAsmFnPtr>(exit_fn_void);
+
+    // Compartment services entry function in executive
+    void *capmgr_service_entry_void = Capability(reinterpret_cast<uintptr_t>(&CompartmentSwitchEntry));
+    m_capmgr_service_entry_fn = reinterpret_cast<CompEntryAsmFnPtr>(capmgr_service_entry_void);
+
+    // Compartment services callback handler function
+    void *service_callback_void = Capability(reinterpret_cast<uintptr_t>(CompartmentServiceHandler));
+    m_capmgr_service_fn = reinterpret_cast<CompServiceCallbackFnPtr>(service_callback_void);
 }
 
 void* CCompartment::CreateStack(uint32_t stack_size)
@@ -128,6 +135,16 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
     // To avoid extra functionality being in the header, we update these parameters here
     comp_fn_data->comp_exit_fp = m_exit_fn;
     comp_fn_data->fp = wamr_fn_void;
+    
+    // Service callback entry point
+    comp_fn_data->service_callback_entry_fp = m_capmgr_service_entry_fn;
+
+    // Service callback function to call
+    comp_fn_data->capmgr_service_fp = m_capmgr_service_fn;
+
+    // Sealing capability
+    comp_fn_data->sealer_cap = m_sealer_cap;
+
 
     // Get the compartment's data table, which now needs to be sealed
     // For the compartment, we use the underlying pointer to the shared_ptr
@@ -140,7 +157,7 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
     // 4. The sealed comp function data
     // 5. The sealer capability
 
-    uintptr_t result = CompartmentCaller(&CompartmentEntry, reinterpret_cast<void*>(&m_comp_data),
+    uintptr_t result = CompartmentCaller(&CompartmentSwitchEntry, reinterpret_cast<void*>(&m_comp_data),
                                 m_comp_entry, comp_fn_data_sealed, m_sealer_cap);
     return result;
 }

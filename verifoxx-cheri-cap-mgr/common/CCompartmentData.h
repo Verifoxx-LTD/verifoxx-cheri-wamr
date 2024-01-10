@@ -38,12 +38,18 @@ typedef enum
 class alignas(__BIGGEST_ALIGNMENT__) CCompartmentData
 {
 public:
-    CompExitAsmFnPtr comp_exit_fp;   // Function pointer to the return function in the cap manager
-    void* fp;                        // Function pointer to the WASM function to call
-    WamrCall_t       wamr_call_type;    // Which derived class it is
+    CompExitAsmFnPtr comp_exit_fp;                  // Function pointer to the return function in the cap manager
+    CompEntryAsmFnPtr service_callback_entry_fp;    // Function pointer to the callback service function entry point in the cap manager
+    CompServiceCallbackFnPtr capmgr_service_fp;     // Function pointer to the callback service handling function in capability manager
+    void* sealer_cap;                               // Capability used by compartment to seal data passed back to capmgr
+
+    void* fp;                                       // Function pointer to the WASM function to call
+    WamrCall_t       wamr_call_type;                // Which derived class it is
 
 public:
-    CCompartmentData(WamrCall_t call_type) : wamr_call_type(call_type), comp_exit_fp(nullptr), fp(nullptr) {}
+    CCompartmentData(WamrCall_t call_type) : wamr_call_type(call_type),
+                                            comp_exit_fp(nullptr), fp(nullptr),
+                                            capmgr_service_fp(nullptr) {}
     virtual ~CCompartmentData() {}
 };
 

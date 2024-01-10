@@ -65,8 +65,7 @@
 .endm
 
 
-/* void CompartmentEntry(void *comp_data, void *pf, void *comp_ptr_table_sealed, void *sealer_cap) */  
-ENTRY(CompartmentEntry)
+ENTRY(CompartmentSwitchEntry)
 	// Frame record + space for a compdata object + space for CLR
 	sub	stack_ptr, stack_ptr, #(16 + COMPDATA_STRUCT_SIZE)
 	create_frame_record offset=COMPDATA_STRUCT_SIZE
@@ -99,7 +98,7 @@ ENTRY(CompartmentEntry)
 	// c2: comp_ptr_table (sealed)
 	// c3: capability to unseal c2
 	// Frame Pointer
-	
+
 	clear_all_registers_except c1, c2, c3, c29
 
 	// Call into the compartment, which can involve switching to
@@ -110,8 +109,8 @@ ENTRY(CompartmentEntry)
 	unseal c0, c2, c3
 	brr	c1
 
-	.globl CompartmentExit
-CompartmentExit:
+	.globl CompartmentSwitchReturn
+CompartmentSwitchReturn:
 	// The compartment has returned.
 	// Restore the restricted state environment and return to the caller.
 	ldp	ctmp, ctmp2, [stack_ptr, #COMPDATA_CSP_OFFSET]
@@ -129,4 +128,15 @@ CompartmentExit:
 	// use RETR to allow switching to Restricted.
 	retr	clr
 
-END(CompartmentEntry)
+	.globl CompartmentServiceCallbackSwitchReturn
+CompartmentServiceCallbackSwitchReturn:
+	// Capability manager service return to compartment
+    // Remove the last stack Frame
+    // Note our "frame" is arranged differently to the compilers
+    ldr frame_ptr, [frame_ptr]
+	sub stack_ptr, frame_ptr, #COMPDATA_STRUCT_SIZE
+
+    // Everything else is same as CompartmentExit
+    b CompartmentSwitchReturn
+
+END(CompartmentSwitchEntry)
