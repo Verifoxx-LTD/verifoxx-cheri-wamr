@@ -34,7 +34,7 @@
         "WAMR_BUILD_AOT_CHERI_PTR": "16",
         "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1",
         "CAP_MGR": "1",
-        "CAPMGR_BUILD_STATIC":  "0"
+        "CAPMGR_BUILD_STATIC":  "1"
       },
       "condition": {
         "type": "equals",
