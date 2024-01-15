@@ -127,7 +127,7 @@ std::string CSharedObject::DumpRelocTables() const
         throw CCapMgrException("Shared object is not loaded!");
     }
 
- 
+    strstr << "Relocation Tables for " << m_name_full << ":" << std::endl;
     for (const auto& p_reloc_table : m_reloctables)
     {
         try

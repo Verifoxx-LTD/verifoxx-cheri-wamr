@@ -269,11 +269,13 @@ include (${SHARED_DIR}/utils/uncommon/shared_uncommon.cmake)
 
 ###### WAMR libiwasm ########
 add_library (${WAMR_LIB} SHARED ${WAMR_RUNTIME_LIB_SOURCE}
+    "common/comp_caller.h"
+    "common/comp_caller.c"
     "common/comp_common_defs.h"
     "common/comp_common_asm.h"
+    "common/CCompartmentData.h"
     "compartment/comp_entry.cpp"
     "compartment/comp_entry_trampoline_asm.S"
-    "common/CCompartmentData.h"
 )
 
 target_include_directories(${WAMR_LIB} PRIVATE

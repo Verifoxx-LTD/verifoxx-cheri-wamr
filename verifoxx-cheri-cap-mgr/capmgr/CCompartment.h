@@ -56,7 +56,10 @@ private:
     CompartmentId               m_id;
     void* m_sealer_cap;         // Capability used for sealing
     void* m_comp_entry;         // Capability which is the compartment's entry function (in restricted)
-    CompExitAsmFnPtr m_exit_fn;   // and the exit function (in executive)
+    CompExitAsmFnPtr m_exit_fn;   // and the exit function (in executive).
+
+    CompEntryAsmFnPtr m_capmgr_service_entry_fn;      // Compartment service callback entry function pointer.
+    CompServiceCallbackFnPtr m_capmgr_service_fn;    // Compartment service callback handler function pointer. 
 
     void* CreateStack(uint32_t stack_size);
     void* RestrictAndSeal(CCompartmentData* comp_fn_data);

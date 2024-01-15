@@ -35,7 +35,8 @@ using namespace CapMgr;
 using namespace std;
 
 
-static constexpr uint32 LOG_LEVEL = BH_LOG_LEVEL_DEBUG;
+static uint32 bh_log_level_value = BH_LOG_LEVEL_DEBUG;
+
 static constexpr uint32 STACK_SIZE = 64 * 1024;
 static constexpr uint32 HEAP_SIZE = 16 * 1024;
 static constexpr char ADDR_POOL[] = "0.0.0.0/0";
@@ -80,7 +81,7 @@ private:
     bool setup()
     {
         // Enable all logging
-        m_proxy.bh_log_set_verbose_level(LOG_LEVEL);
+        m_proxy.bh_log_set_verbose_level(bh_log_level_value);
 
         RuntimeInitArgs init_args;
         memset(&init_args, 0, sizeof(RuntimeInitArgs));
@@ -262,7 +263,7 @@ constexpr size_t CRunner::HEAP_SIZE;
 
 
 // Call this to load libs when cap manager starts
-static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plibs)
+static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plibs, bool dump_tables=false)
 {
     auto rwcap{ Capability(getauxptr(AT_CHERI_EXEC_RW_CAP)) };
     auto fixup_cap{ Capability(getauxptr(AT_CHERI_EXEC_RW_CAP)) };
@@ -274,7 +275,7 @@ static bool lib_load_and_fix(const std::string& libname, CCompartmentLibs*& plib
 #endif
     plibs = new CCompartmentLibs{ libname, rwcap, fixup_cap, load_new };
 
-    if (Log::Level() == VERBOSE)
+    if (dump_tables)
     {
         L_(VERBOSE) << "Dump libs phdrs: " << *plibs;
         L_(VERBOSE) << "Dump reloc tables: " << plibs->DumpRelocTables();
@@ -305,15 +306,50 @@ static bool lib_restore_and_end(CCompartmentLibs* plibs)
 
 int main(int argc, char *argv[])
 {
-    int exitcode = -1;
+    int exitcode{ -1 };
+    bool dumpRelocTables{ false };
 
     Log::Level() = DEBUG;
 
     L_(ALWAYS) << endl << argv[0] << " : Starting up...";
 
+    // Try and read loglevel.  If the first argument looks like an integer it is a log level, else it is skipped
+    // and we read the library name
+    if (argc > 1)
+    {
+        string loglevelmaybe{ argv[1] };
+        if (loglevelmaybe.size() == 1)
+        {
+            try
+            {
+                uint32_t i{ std::stoi(loglevelmaybe) };
+
+                // 5 is special case - it measn verbose, but also dump tables
+                if (i == 5)
+                {
+                    dumpRelocTables = true;
+                    i--;
+                }
+
+                if (i >= (uint32_t)ALWAYS && i <= (uint32_t)VERBOSE)
+                {
+                    Log::Level() = static_cast<TLogLevel>(i);
+                    bh_log_level_value = i;
+
+                    // Skip the fact we read this initial argument
+                    argv++;
+                    argc--;
+                }
+            }
+            catch (std::invalid_argument)
+            {
+            }
+        }
+    }
+
     if (argc < 3) {
         L_(ALWAYS) << "Usage: " << argv[0]
-            << "<libiwasm.so> <wasm|aot-file> [<fn_to_run_or_default>] [param1 param2 "
+            << " [<loglevel=0|1|2|3|4|5>] <libiwasm.so> <wasm|aot-file> [<fn_to_run_or_default>] [param1 param2 "
             << "param3...]";
         return exitcode;
     }
@@ -347,7 +383,7 @@ int main(int argc, char *argv[])
     try {
         // Do lib fixup
         CCompartmentLibs* plibs = nullptr;
-        if (!lib_load_and_fix(libname, plibs))
+        if (!lib_load_and_fix(libname, plibs, dumpRelocTables))
         {
             return -1;
         }

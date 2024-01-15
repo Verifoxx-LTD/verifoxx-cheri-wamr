@@ -16,18 +16,22 @@ extern "C"
     #define COMPDATA_STRUCT_SIZE (4 * 16)   // Includes CLR space
 
 #ifndef __ASSEMBLER__
-
-    // CompartmentEntry: ASM call into restricted
+    
+    // CompartmentSwitchEntry: ASM call to switch to Compartment Entry point or Capability Service Callback Handler
     // Given:
     // (1) The compartment data (CSP etc)
-    // (2) The unwrapping function (pointer) in restricted
-    // (3) The sealed comp ptr table
-    // (4) The sealer capability
-    void CompartmentEntry(void *comp_data, void *pf, void *comp_ptr_sealed, void *sealer_cap);
+    // (2) The handling function (pointer) to switch to (Compartment Entry or service callback handler)
+    // (3) The sealed data needed by the handling function
+    // (4) The sealer capability used to seal the above
+    void CompartmentSwitchEntry(void *comp_data, void *pf, void *comp_ptr_sealed, void *sealer_cap);
     
-    // CompartmentExit: Return back from restricted
-    void CompartmentExit(uintptr_t retval);
+    // CompartmentSwitchReturn: Return from a Compartment handling function, with a state change restricted->executive
+    // Given: return value from the handling function
+    void CompartmentSwitchReturn(uintptr_t retval);
 
+    // CompartmentServiceCallbackSwitchReturn: Return from a capability service callback function, with a state change executive->restricted
+    // Given: return value from the handling function
+    void CompartmentServiceCallbackSwitchReturn(uintptr_t retval);
 
     // Fn pointer for the compartment entry fn which is ASM function in executive
     typedef void(*CompEntryAsmFnPtr)(void*, void*, void*, void*);
