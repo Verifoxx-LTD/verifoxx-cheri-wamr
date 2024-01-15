@@ -95,6 +95,7 @@ public:
     {
         for (const auto& so : m_so_map)
         {
+            L_(VERBOSE) << "Process LibCapFixups for " << so.first << ":" << std::endl;
             if (!so.second.DoLibCapFixups(makeRestricted))
             {
                 return false;
