@@ -30,7 +30,7 @@ The WAMR library requires other shared object libraries (e.g libC) at runtime.  
 By default, this is */purecap-lib* on the Morello box.  **It is recommended that all libraries and capability manager executable are placed in this same folder, to make things easier during development.**
 
 If you want to change the search path, modify the following flag in *CMakePresets.json*:
-- MORELLO_PURECAP_LIBS_FOLDER=<path>
+- MORELLO_PURECAP_LIBS_FOLDER=your/path/here
 
 *NOTE: If the capability manager executable is dynamically linked, it will search for needed libraries in this folder as well*.
 

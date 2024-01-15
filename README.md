@@ -1,7 +1,7 @@
 VERIFOXX-CHERI-WAMR
 ===================
 
-** This integration branch will by default build the Capability Manager Executable and WAMR run in a shared library compartment.  As well as the instructions below, please refer to [CHERI-WAMR Capability Manager](./verifoxx-cheri-capmgr/README.md) for additional instructions.**
+**This integration branch will by default build the Capability Manager Executable and WAMR run in a shared library compartment.  As well as the instructions below, please refer to [CHERI-WAMR Capability Manager](./verifoxx-cheri-cap-mgr/README.md) for additional instructions.**
 
 This is a private "fork" of the WebAssembly Micro Runtime Repository which is modified to be CHERI-capability-aware and support features to compartmentalise executed WASM.
 The version in "main" will build the iwasm program (VM Core) for both CHERI Hybrid and pure-cap on Linux, but note the pure-cap version is very cut down and is likely to only run the simplest WASM code!
