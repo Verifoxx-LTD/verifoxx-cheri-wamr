@@ -144,7 +144,7 @@ class CPltRel : public CRelocationTable
 
 public:
     CPltRel(const CDynamicSection& dynsec, elfptr_t elf_base_addr, const Capability& fixup_cap) :
-        CRelocationTable(dynsec, elf_base_addr, ".plt.rel", fixup_cap)
+        CRelocationTable(dynsec, elf_base_addr, ".rel(a).plt", fixup_cap)
     {
         // In the constructor we get the table so we can read the rela flag
         m_plt_range = m_dynsec.GetPltRel(m_is_rela, m_elem_size);

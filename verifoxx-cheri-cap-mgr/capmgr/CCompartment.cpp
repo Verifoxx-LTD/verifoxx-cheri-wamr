@@ -127,7 +127,7 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
 
     // Lookup and then build a capability for the WAMR function
     void* wamr_fn_void = Capability(getauxptr(AT_CHERI_EXEC_RX_CAP))
-        .SetAddress(wamr_fn)
+        .SetBoundsAndAddress(Capability(wamr_fn))
         .SetPerms(kCompartmentExecPerms)
         .SEntry();
 
