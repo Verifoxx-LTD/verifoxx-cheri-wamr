@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <type_traits>
 #include <cheriintrin.h>
+#include <map>
 
 #include "CCapMgrLogger.h"
 
@@ -11,9 +12,18 @@
 #include "comp_caller.h"
 #include "CCapability.h"
 #include "capmgr_services.h"
+#include "capmgr_service_function_types.h"
 
 using namespace std;
 using namespace CapMgr;
+
+// Map of all service functions - @ToDo make trampolines
+static const ServiceFunctionTable service_func_table =
+{
+    {"cheri_malloc", reinterpret_cast<void*>(&cheri_malloc)},
+    {"cheri_realloc", reinterpret_cast<void*>(&cheri_realloc)},
+    {"cheri_free", reinterpret_cast<void*>(&cheri_free)}
+};
 
 CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,
                 const std::string comp_entry_trampoine_function) : m_comp_libs(comp_libs), m_id(id)
@@ -145,6 +155,8 @@ uintptr_t CCompartment::CallCompartmentFunction(const std::string& fn_to_call, c
     // Sealing capability
     comp_fn_data->sealer_cap = m_sealer_cap;
 
+    // Service function table
+    comp_fn_data->service_func_table = &service_func_table;
 
     // Get the compartment's data table, which now needs to be sealed
     // For the compartment, we use the underlying pointer to the shared_ptr

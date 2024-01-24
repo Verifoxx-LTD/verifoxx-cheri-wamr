@@ -11,8 +11,10 @@ extern "C"
     #include <stddef.h>
     #include <stdint.h>
 
-    // For now, we will just hard code this to do memory allocation
-    uintptr_t CompartmentServiceHandler(void* callback_data);
+    uintptr_t CompartmentServiceHandler(void* service_data_object);
+    void* cheri_malloc(size_t sz_bytes);
+    void* cheri_realloc(void* ptr, size_t sz_bytes);
+    void cheri_free(void* ptr);
 
 #ifdef __cplusplus
 }

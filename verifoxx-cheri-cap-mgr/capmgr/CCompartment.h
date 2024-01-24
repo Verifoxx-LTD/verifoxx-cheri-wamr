@@ -9,6 +9,7 @@
 #include "comp_common_defs.h"
 #include "CCompartmentData.h"
 #include "CCompartmentLibs.h"
+#include "capmgr_service_function_types.h"
 
 // Comp perms
 constexpr size_t kCompartmentDataPerms =

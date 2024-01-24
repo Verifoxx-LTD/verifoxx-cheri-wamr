@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <cstdlib>
+#include <memory>
 
 #include "../common/comp_common_defs.h"
 #include "../common/comp_caller.h"
@@ -9,6 +10,17 @@
 
 #include "bh_log.h"
 #include "wasm_memory.h"
+
+#include "service_call_proxy.h"
+
+// Global CServiceCallProxy ptr which is set to the single CServiceCallProxy on each compartment call
+static std::unique_ptr<CServiceCallProxy> g_service_call_proxy;
+
+// Accessor for user classes
+CServiceCallProxy *CServiceCallProxy::GetInstance()
+{
+    return g_service_call_proxy.get();
+}
 
 // Call function looks up type of derived class data and then static_cast() to resolve
 static uintptr_t CallFunction(CCompartmentData* p)
@@ -206,23 +218,18 @@ static uintptr_t CallFunction(CCompartmentData* p)
 }
 
 // CompartmentUnwrap: Given pointer to the data table
-// To Do: This needs to figure out what it needs to call in future, not hard coded
 extern "C" void CompartmentUnwrap(void* comp_data_object)
 {
-    static bool seeded = false;
-    if (!seeded)
-    {
-        srand(0x12345678);
-        seeded = true;
-    }
-
     CCompartmentData *comp_fn_data = reinterpret_cast<CCompartmentData*>(comp_data_object);
 
+    // Create the service call proxy
+    g_service_call_proxy = std::make_unique<CServiceCallProxy>(comp_fn_data);
+
+
     /********* TEST *************/
-    uint32 arg = rand() >> 1;
-    std::cout << "Test callback capmgr service: sending " << arg << std::endl;
-    uint32_t result = (uint32_t)CompartmentServiceCallback(comp_data_object, reinterpret_cast<void*>(&arg));
-    std::cout << "Service callback returned " << result << std::endl;
+    std::cout << "Test callback capmgr service: cheri_malloc() faked" << std::endl;
+    void *returned = CServiceCallProxy::GetInstance()->cheri_malloc(120);
+    std::cout << "Test callback capmgr service: cheri_malloc() faked RETURNED: " << returned << std::endl;
     /********* END TEST *********/
 
     std::cout << "Call WAMR function in compartment" << std::endl;
@@ -230,6 +237,8 @@ extern "C" void CompartmentUnwrap(void* comp_data_object)
     // Get compartment data to call implementation specific function
     uintptr_t retval = CallFunction(comp_fn_data);
     std::cout << "Result from WAMR function compartment call: " << (bool)retval << std::endl;
+
+    g_service_call_proxy.release(); // Cleanup, proxy no longer needed
 
     // Call compartment return passing our exit function pointer
     CompartmentReturn(comp_fn_data->comp_exit_fp, retval);
@@ -240,26 +249,4 @@ extern "C" void CompartmentReturn(CompExitAsmFnPtr fp, uintptr_t return_arg)
     // Compartment calls fp to return, pass back return_arg as argument
     fp(return_arg);
     __builtin_unreachable();
-}
-
-// Callback into capability manager to run services
-extern "C" uintptr_t CompartmentServiceCallback(void *comp_data_ptr_void, void *args_data)
-{
-    // Call through into the entry function
-    // In this case, compartment data has everything set to NULL as it is not required
-    struct CompartmentData_t    comp_data_nulls;
-    comp_data_nulls.csp = (void*)NULL;
-    comp_data_nulls.ctpidr = (void*)NULL;
-    comp_data_nulls.ddc = (void*)NULL;
-
-    CCompartmentData* comp_data_ptr = reinterpret_cast<CCompartmentData*>(comp_data_ptr_void);
-
-    void* sealer_cap = comp_data_ptr->sealer_cap;
-
-    void* sealed = cheri_seal(args_data, sealer_cap);
-    return CompartmentCaller(comp_data_ptr->service_callback_entry_fp,
-                                                        &comp_data_nulls,
-                                                        reinterpret_cast<void*>(comp_data_ptr->capmgr_service_fp),
-                                                        sealed,
-                                                        sealer_cap);
 }
