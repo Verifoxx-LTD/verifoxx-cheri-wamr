@@ -19,8 +19,7 @@ extern "C"
     typedef void(*CompUnwrapFnPtr)(void*);
 
     /* Fn Ptr for the callback service function */
-    typedef uintptr_t(*CompServiceCallbackFnPtr)(void*, void*);
-
+    typedef uintptr_t(*CompServiceCallbackFnPtr)(void*);
 
     /* Function pointer typedefs for all WAMR functions called from capability manager
     * C not C++ typedefs

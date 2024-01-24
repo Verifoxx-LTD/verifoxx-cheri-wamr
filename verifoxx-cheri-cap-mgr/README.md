@@ -1,6 +1,8 @@
 CHERI-WAMR Capability Manager
 =============================
 
+**THIS DOCUMENT IS NOW OUT OF DATE**
+
 This is an experimental front end program which implements a "capability manager" executable that calls WAMR API functions within a compartment in order to run a WASM application.  The executable provides similar functionality to the WAMR *iwasm* executable.
 
 WAMR code is built to a dynamic library (shared object ELF) and loaded at runtime.

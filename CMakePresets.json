@@ -19,7 +19,7 @@
         "CHERI_PURECAP": "0",
         "CHERI_STATIC_BUILD": "1",
         "NOT_CHERI_COMPILER_FLAGS": "-fpack-struct=16 -mstrict-align",
-        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap-capmgr",
         "WAMR_BUILD_AOT": "1",
         "WAMR_BUILD_LIBC_BUILTIN": "1",
         "WAMR_BUILD_FAST_INTERP": "0",
@@ -30,10 +30,10 @@
         "WAMR_DISABLE_HW_BOUND_CHECK": "1",
         "WAMR_BUILD_REF_TYPES": "0",
         "WAMR_APP": "0",
-        "WAMR_BUILD_NATIVE_TEST_LIB": "1",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "0",
         "WAMR_BUILD_AOT_CHERI_PTR": "16",
         "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1",
-        "CAP_MGR": "1",
+        "CAP_MGR": "0",
         "CAPMGR_BUILD_STATIC":  "1"
       },
       "condition": {

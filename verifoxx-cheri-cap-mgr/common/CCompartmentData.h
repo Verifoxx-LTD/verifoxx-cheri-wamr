@@ -10,6 +10,7 @@
 #include "wasm.h"
 #include "wasm_runtime_common.h"
 #include "comp_common_defs.h"
+#include "capmgr_service_function_types.h"
 
 // WAMR Fn Call type - not a C++ enum
 typedef enum
@@ -46,10 +47,12 @@ public:
     void* fp;                                       // Function pointer to the WASM function to call
     WamrCall_t       wamr_call_type;                // Which derived class it is
 
+    const ServiceFunctionTable* service_func_table;
 public:
     CCompartmentData(WamrCall_t call_type) : wamr_call_type(call_type),
-                                            comp_exit_fp(nullptr), fp(nullptr),
-                                            capmgr_service_fp(nullptr) {}
+        comp_exit_fp(nullptr), fp(nullptr),
+        capmgr_service_fp(nullptr) {}
+
     virtual ~CCompartmentData() {}
 };
 
