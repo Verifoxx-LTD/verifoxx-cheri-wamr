@@ -65,15 +65,25 @@ extern "C"
     typedef void(*FnPtr_wasm_runtime_deinstantiate)(wasm_module_inst_t module_inst);
     typedef void(*FnPtr_wasm_runtime_unload)(wasm_module_t module);
     typedef void(*FnPtr_wasm_runtime_destroy)();
+    typedef bool(*FnPtr_wasm_application_execute_main)(wasm_module_inst_t module_inst,
+            int32_t argc, char* argv[]);
+    typedef bool(*FnPtr_wasm_application_execute_func)(wasm_module_inst_t module_inst,
+            const char* name, int32_t argc, char* argv[]);
+    typedef void(*FnPtr_wasm_runtime_get_version)(uint32_t* major, uint32_t* minor, uint32_t* patch);
+    typedef bool(*FnPtr_wasm_runtime_is_xip_file)(const uint8_t* buf, uint32_t size);
+    typedef uint32_t(*FnPtr_wasm_runtime_get_wasi_exit_code)(WASMModuleInstanceCommon* module_inst);
+    typedef bool(*FnPtr_wasm_runtime_register_natives)(const char* module_name,
+            NativeSymbol* native_symbols,
+            uint32 n_native_symbols);
+    typedef bool(*FnPtr_wasm_runtime_unregister_natives)(const char* module_name,
+            NativeSymbol* native_symbols);
+
 
     // Declare the initial function in the compartment
     void CompartmentUnwrap(void* comp_data_table);
 
     // Declare the return function in the compartment
     void CompartmentReturn(CompExitAsmFnPtr fp, uintptr_t return_arg);
-
-    // Declare the service callback function in the compartment
-    uintptr_t CompartmentServiceCallback(void* comp_data_ptr_void, void* args_data);
 
 #ifdef __cplusplus
 }

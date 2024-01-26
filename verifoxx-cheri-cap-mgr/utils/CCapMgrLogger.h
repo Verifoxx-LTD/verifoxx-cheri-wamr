@@ -62,7 +62,7 @@ namespace CapMgr
 
         static TLogLevel& Level()
         {
-            static TLogLevel reportingLevel = VERBOSE;
+            static TLogLevel reportingLevel = ALWAYS;
             return reportingLevel;
         }
 
