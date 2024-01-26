@@ -34,7 +34,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallCompartmentData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_call_wasm_a>(p_d->fp);
 
-            std::cout << "Calling call_wasm_a" << std::endl;
+            LOG_DEBUG("Calling call_wasm_a");
             result = (uintptr_t)real_fp(p_d->exec_env, p_d->function, p_d->num_results, p_d->results, p_d->num_args, p_d->args);
         }
         break;
@@ -44,7 +44,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallFullInitData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_full_init>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_full_init" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_full_init");
             result = (uintptr_t)real_fp(p_d->init_args);
         }
         break;
@@ -54,7 +54,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeLoadData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_load>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_load" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_load");
             result = (uintptr_t)real_fp(p_d->buf, p_d->size, p_d->error_buf, p_d->error_buf_size);
         }
         break;
@@ -64,7 +64,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeInstantiateData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_instantiate>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_instantiate" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_instantiate");
             result = (uintptr_t)real_fp(p_d->module, p_d->default_stack_size, p_d->host_managed_heap_size,
                 p_d->error_buf, p_d->error_buf_size);
         }
@@ -75,7 +75,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeCreateExecEnvData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_create_exec_env>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_create_exec_env" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_create_exec_env");
             result = (uintptr_t)real_fp(p_d->module_inst, p_d->stack_size);
         }
         break;
@@ -85,7 +85,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeLookupFunctionData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_lookup_function>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_lookup_function" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_lookup_function");
             result = (uintptr_t)real_fp(p_d->module_inst, p_d->name, p_d->signature);
         }
         break;
@@ -95,7 +95,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeLookupWasiStartFunctionData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_lookup_wasi_start_function>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_lookup_wasi_start_function" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_lookup_wasi_start_function");
             result = (uintptr_t)real_fp(p_d->module_inst);
         }
         break;
@@ -105,7 +105,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallLogSetVerboseLevelData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_bh_log_set_verbose_level>(p_d->fp);
 
-            std::cout << "Calling bh_log_set_verbose_level" << std::endl;
+            LOG_DEBUG("Calling bh_log_set_verbose_level");
             real_fp(p_d->level);
         }
         break;
@@ -115,7 +115,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeSetWasiArgsData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_set_wasi_args>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_set_wasi_args" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_set_wasi_args");
             real_fp(p_d->module,
                 p_d->dir_list, p_d->dir_count,
                 p_d->map_dir_list, p_d->map_dir_count,
@@ -129,7 +129,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeSetWasiAddrPoolData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_set_wasi_addr_pool>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_set_wasi_addr_pool" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_set_wasi_addr_pool");
             real_fp(p_d->module,
                 p_d->addr_pool, p_d->addr_pool_size
             );
@@ -141,7 +141,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeSetWasiNsLookupPoolData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_set_wasi_ns_lookup_pool>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_set_wasi_ns_lookup_pool" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_set_wasi_ns_lookup_pool");
             real_fp(p_d->module, p_d->ns_lookup_pool, p_d->ns_lookup_pool_size);
         }
         break;
@@ -151,7 +151,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeSetExceptionData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_set_exception>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_set_exception" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_set_exception");
             real_fp(p_d->module_inst, p_d->exception);
         }
         break;
@@ -161,7 +161,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeGetExceptionData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_get_exception>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_set_exception" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_set_exception");
             result = (uintptr_t)real_fp(p_d->module_inst);
         }
         break;
@@ -171,7 +171,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeDestroyExecEnvData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_destroy_exec_env>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_destroy_exec_env" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_destroy_exec_env");
             real_fp(p_d->exec_env);
         }
         break;
@@ -181,7 +181,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeDeInstantiateData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_deinstantiate>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_deinstantiate" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_deinstantiate");
             real_fp(p_d->module_inst);
         }
         break;
@@ -191,7 +191,7 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeUnloadData*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_unload>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_unload" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_unload");
             real_fp(p_d->module);
 
         }
@@ -202,24 +202,96 @@ static uintptr_t CallFunction(CCompartmentData* p)
             auto p_d = static_cast<CWasmCallRuntimeDestroy*>(p);
             auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_destroy>(p_d->fp);
 
-            std::cout << "Calling wasm_runtime_destroy" << std::endl;
+            LOG_DEBUG("Calling wasm_runtime_destroy");
             real_fp();
+        }
+        break;
+
+        case WAMRCall_callExecuteMain:
+        {
+            auto p_d = static_cast<CWasmCallExecuteMainData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_application_execute_main>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_application_execute_main");
+            result = (uintptr_t)real_fp(p_d->module_inst, p_d->argc, p_d->argv);
+        }
+        break;
+
+        case WAMRCall_callExecuteFunc:
+        {
+            auto p_d = static_cast<CWasmCallExecuteFuncData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_application_execute_func>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_application_execute_func");
+            result = (uintptr_t)real_fp(p_d->module_inst, p_d->name, p_d->argc, p_d->argv);
+        }
+        break;
+
+        case WAMRCall_callGetVersion:
+        {
+            auto p_d = static_cast<CWasmCallGetVersionData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_get_version>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_runtime_get_version");
+            real_fp(p_d->major, p_d->minor, p_d->patch);
+        }
+        break;
+
+        case WAMRCall_callIsXipFile:
+        {
+            auto p_d = static_cast<CWasmCallIsXipFileData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_is_xip_file>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_runtime_is_xip_file");
+            result = (uintptr_t)real_fp(p_d->buf, p_d->size);
+        }
+        break;
+
+        case WAMRCall_callGetWasiExitCode:
+        {
+            auto p_d = static_cast<CWasmCallGetWasiExitCodeData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_get_wasi_exit_code>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_runtime_get_wasi_exit_code");
+            result = (uintptr_t)real_fp(p_d->module_inst);
+        }
+        break;
+
+        case WAMRCall_callRegisterNatives:
+        {
+            auto p_d = static_cast<CWasmCallRegisterNativesData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_register_natives>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_runtime_register_natives");
+            result = (uintptr_t)real_fp(p_d->module_name, p_d->native_symbols, p_d->n_native_symbols);
+        }
+        break;
+
+        case WAMRCall_callUnregisterNatives:
+        {
+            auto p_d = static_cast<CWasmCallUnregisterNativesData*>(p);
+            auto real_fp = reinterpret_cast<FnPtr_wasm_runtime_unregister_natives>(p_d->fp);
+
+            LOG_DEBUG("Calling wasm_runtime_unregister_natives");
+            result = (uintptr_t)real_fp(p_d->module_name, p_d->native_symbols);
         }
         break;
 
         default:
         {
-            std::cout << "Failed to call WAMR function - unsupported function" << std::endl;
+            LOG_ERROR("Failed to call WAMR function - unsupported function");
         }
         break;
     }
-    std::cout << "WAMR function returns" << std::endl;
+    LOG_DEBUG("\tWAMR function call returned");
     return result;
 }
 
 // CompartmentUnwrap: Given pointer to the data table
 extern "C" void CompartmentUnwrap(void* comp_data_object)
 {
+    LOG_DEBUG("--> COMPARTMENT ENTRY -->");
+
     CCompartmentData *comp_fn_data = reinterpret_cast<CCompartmentData*>(comp_data_object);
 
     // Create the service call proxy
@@ -232,11 +304,10 @@ extern "C" void CompartmentUnwrap(void* comp_data_object)
     std::cout << "Test callback capmgr service: cheri_malloc() faked RETURNED: " << returned << std::endl;
     /********* END TEST *********/
 
-    std::cout << "Call WAMR function in compartment" << std::endl;
+    LOG_VERBOSE("Call WAMR function in compartment");
 
     // Get compartment data to call implementation specific function
     uintptr_t retval = CallFunction(comp_fn_data);
-    std::cout << "Result from WAMR function compartment call: " << (bool)retval << std::endl;
 
     g_service_call_proxy.release(); // Cleanup, proxy no longer needed
 
@@ -247,6 +318,8 @@ extern "C" void CompartmentUnwrap(void* comp_data_object)
 extern "C" void CompartmentReturn(CompExitAsmFnPtr fp, uintptr_t return_arg)
 {
     // Compartment calls fp to return, pass back return_arg as argument
+    LOG_DEBUG("<-- COMPARTMENT EXIT <--");
+
     fp(return_arg);
     __builtin_unreachable();
 }

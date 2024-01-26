@@ -55,12 +55,17 @@ public:
         void* sealed = cheri_seal(service_fn_data.get(), m_compartment_data->sealer_cap);
 
         // Call into the capability manager
-        return CompartmentCaller(
+
+        LOG_DEBUG("<-- COMPARTMENT EXIT TO CAPMGR SERVICE <--");
+        auto ret = CompartmentCaller(
             m_compartment_data->service_callback_entry_fp,   /* CapMgr entry function in Asm */
             &comp_data_nulls,                               /* Stack etc. to switch in (n/a) */
             reinterpret_cast<void*>(m_compartment_data->capmgr_service_fp),           /* CapMgr service handler called from Asm */
             sealed,                                         /* Sealed argument data including the underlying function to call */
             m_compartment_data->sealer_cap);                 /* Capability used to seal */
+
+        LOG_DEBUG("--> COMPARTMENT ENTRY FROM CAPMGR SERVICE -->");
+        return ret;
     }
 
     template <typename T, typename... Args>

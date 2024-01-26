@@ -130,6 +130,47 @@ public:
         return (bool)CallWamrFn<CWasmCallCompartmentData>(__func__, std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    bool wasm_application_execute_main(Args&&... args)
+    {
+        return (bool)CallWamrFn<CWasmCallExecuteMainData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    bool wasm_application_execute_func(Args&&... args)
+    {
+        return (bool)CallWamrFn<CWasmCallExecuteFuncData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    void wasm_runtime_get_version(Args&&... args)
+    {
+        CallWamrFn<CWasmCallGetVersionData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    bool wasm_runtime_is_xip_file(Args&&... args)
+    {
+        return (bool)CallWamrFn<CWasmCallIsXipFileData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    uint32_t wasm_runtime_get_wasi_exit_code(Args&&... args)
+    {
+        return (uint32_t)CallWamrFn<CWasmCallGetWasiExitCodeData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    bool wasm_runtime_register_natives(Args&&... args)
+    {
+        return (bool)CallWamrFn<CWasmCallRegisterNativesData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    bool wasm_runtime_unregister_natives(Args&&... args)
+    {
+        return (bool)CallWamrFn<CWasmCallUnregisterNativesData>(__func__, std::forward<Args>(args)...);
+    }
 };
 
 #endif /* _CWAMRPROXY_H__ */

@@ -31,7 +31,14 @@ typedef enum
     WAMRCall_callDestroyExecEnv,
     WAMRCall_callDesinstantiate,
     WAMRCall_callUnload,
-    WAMRCall_callDestroy
+    WAMRCall_callDestroy,
+    WAMRCall_callExecuteMain,
+    WAMRCall_callExecuteFunc,
+    WAMRCall_callGetVersion,
+    WAMRCall_callRegisterNatives,
+    WAMRCall_callUnregisterNatives,
+    WAMRCall_callIsXipFile,
+    WAMRCall_callGetWasiExitCode
 } WamrCall_t;
 
 // Base class for any WAMR function data
@@ -352,6 +359,121 @@ public:
         uint32_t level_
     ) : CCompartmentData(WAMRCall_callLogSetVerboseLevel),
         level(level_)
+    {}
+};
+
+// Params for wasm_application_execute_main()
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallExecuteMainData : public CCompartmentData
+{
+public:
+    WASMModuleInstanceCommon* module_inst;
+    int32 argc;
+    char **argv;
+public:
+    CWasmCallExecuteMainData(
+        WASMModuleInstanceCommon* module_inst_,
+        int32 argc_,
+        char* argv_[]
+    ) : CCompartmentData(WAMRCall_callExecuteMain),
+        module_inst(module_inst_),
+        argc(argc_),
+        argv(argv_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallExecuteFuncData : public CCompartmentData
+{
+public:
+    WASMModuleInstanceCommon* module_inst;
+    const char* name;
+    int32 argc;
+    char** argv;
+public:
+    CWasmCallExecuteFuncData(
+        WASMModuleInstanceCommon* module_inst_,
+        const char* name_,
+        int32 argc_,
+        char* argv_[]
+    ) : CCompartmentData(WAMRCall_callExecuteFunc),
+        module_inst(module_inst_),
+        name(name_),
+        argc(argc_),
+        argv(argv_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallGetVersionData : public CCompartmentData
+{
+public:
+    uint32_t* major;
+    uint32_t* minor;
+    uint32_t* patch;
+public:
+    CWasmCallGetVersionData(
+        uint32_t* major_, uint32_t* minor_, uint32_t* patch_
+    ) : CCompartmentData(WAMRCall_callGetVersion),
+        major(major_),
+        minor(minor_),
+        patch(patch_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallIsXipFileData : public CCompartmentData
+{
+public:
+    const uint8* buf;
+    uint32 size;
+public:
+    CWasmCallIsXipFileData(
+        const uint8* buf_, uint32 size_
+    ) : CCompartmentData(WAMRCall_callIsXipFile),
+        buf(buf_),
+        size(size_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallGetWasiExitCodeData : public CCompartmentData
+{
+public:
+    WASMModuleInstanceCommon* module_inst;
+public:
+    CWasmCallGetWasiExitCodeData(
+        WASMModuleInstanceCommon* module_inst_
+    ) : CCompartmentData(WAMRCall_callGetWasiExitCode),
+        module_inst(module_inst_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallRegisterNativesData : public CCompartmentData
+{
+public:
+    const char* module_name;
+    NativeSymbol* native_symbols;
+    uint32 n_native_symbols;
+public:
+    CWasmCallRegisterNativesData(
+        const char* module_name_,
+        NativeSymbol* native_symbols_,
+        uint32 n_native_symbols_
+    ) : CCompartmentData(WAMRCall_callRegisterNatives),
+        module_name(module_name_),
+        native_symbols(native_symbols_),
+        n_native_symbols(n_native_symbols_)
+    {}
+};
+
+class alignas(__BIGGEST_ALIGNMENT__) CWasmCallUnregisterNativesData : public CCompartmentData
+{
+public:
+    const char* module_name;
+    NativeSymbol* native_symbols;
+public:
+    CWasmCallUnregisterNativesData(
+        const char* module_name_,
+        NativeSymbol* native_symbols_
+    ) : CCompartmentData(WAMRCall_callUnregisterNatives),
+        module_name(module_name_),
+        native_symbols(native_symbols_)
     {}
 };
 
