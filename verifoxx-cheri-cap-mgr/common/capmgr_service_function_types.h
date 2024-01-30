@@ -14,7 +14,10 @@ extern "C"
     // Service function pointer types (C types)
     typedef uintptr_t(*ServiceHandlerCheriMallocFp)(size_t sz_bytes);
     typedef uintptr_t(*ServiceHandlerCheriReallocFp)(void* ptr, size_t sz_bytes);
+    typedef uintptr_t(*ServiceHandlerCheriAllocLinearMemFp)(size_t sz_bytes);
+    typedef uintptr_t(*ServiceHandlerCheriAllocStackFp)(size_t sz_bytes);
     typedef uintptr_t(*ServiceHandlerCheriFreeFp)(void* ptr);
+    typedef uintptr_t(*ServiceHandlerCheriFreeStackFp)(void* ptr);
 #ifdef __cplusplus
 }
 

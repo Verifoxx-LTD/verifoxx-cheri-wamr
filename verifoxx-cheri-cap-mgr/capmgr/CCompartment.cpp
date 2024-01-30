@@ -13,6 +13,7 @@
 #include "CCapability.h"
 #include "capmgr_services.h"
 #include "capmgr_service_function_types.h"
+#include "cheri_mem_wrapper.h"
 
 using namespace std;
 using namespace CapMgr;
@@ -20,9 +21,12 @@ using namespace CapMgr;
 // Map of all service functions - @ToDo make trampolines
 static const ServiceFunctionTable service_func_table =
 {
-    {"cheri_malloc", reinterpret_cast<void*>(&cheri_malloc)},
-    {"cheri_realloc", reinterpret_cast<void*>(&cheri_realloc)},
-    {"cheri_free", reinterpret_cast<void*>(&cheri_free)}
+    {"cheri_malloc_wrapper", reinterpret_cast<void*>(&cheri_malloc_wrapper)},
+    {"cheri_realloc_wrapper", reinterpret_cast<void*>(&cheri_realloc_wrapper)},
+    {"cheri_alloc_linear_mem_wrapper", reinterpret_cast<void*>(&cheri_alloc_linear_mem_wrapper)},
+    {"cheri_alloc_stack_wrapper", reinterpret_cast<void*>(&cheri_alloc_stack_wrapper)},
+    {"cheri_free_wrapper", reinterpret_cast<void*>(&cheri_free_wrapper)},
+    {"cheri_free_stack_wrapper", reinterpret_cast<void*>(&cheri_free_stack_wrapper)}
 };
 
 CCompartment::CCompartment(const CCompartmentLibs *comp_libs, CompartmentId id, uint32_t stack_size, uint32_t seal_id,

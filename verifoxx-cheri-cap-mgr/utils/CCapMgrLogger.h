@@ -7,23 +7,30 @@
 #include <sstream>
 #include <string>
 #include <array>
-#include <stdio.h>
-#include <sys/time.h>
+#include <cstdio>
+#include <chrono>
+
+using namespace std::chrono;
 
 namespace CapMgr
 {
     inline std::string NowTime()
     {
-        char buffer[11];
-        time_t t;
-        time(&t);
-        tm r;
-        strftime(buffer, sizeof(buffer), "%X", localtime_r(&t, &r));
-        struct timeval tv;
-        gettimeofday(&tv, 0);
-        char result[100] = { 0 };
-        std::sprintf(result, "%s.%03ld", buffer, (long)tv.tv_usec / 1000);
-        return result;
+        char buf[32] = { 0 };
+
+        auto now_time = steady_clock::now();
+        auto duration = now_time.time_since_epoch();
+        auto h = duration_cast<hours>(duration);
+        duration -= h;
+        auto m = duration_cast<minutes>(duration);
+        duration -= m;
+        auto s = duration_cast<seconds>(duration);
+        duration -= s;
+        auto ms = duration_cast<milliseconds>(duration);
+
+        snprintf(buf, sizeof(buf), "%02u:%02u:%02u:%03u", h.count(), m.count(), s.count(), ms.count());
+
+        return buf;
     }
 
     enum TLogLevel
@@ -35,7 +42,8 @@ namespace CapMgr
         VERBOSE
     };
 
-    constexpr std::array<const char*, VERBOSE - ALWAYS + 1> logLevelString = { "ALWAYS", "ERROR", "WARNING", "DEBUG", "VERBOSE" };
+    constexpr std::array<const char*, VERBOSE - ALWAYS + 1> logLevelString =
+    { "INFO ", "ERROR", "WARN ", "DEBUG", "VRBSE" };
 
     template <typename T>
     class LogBase
@@ -54,8 +62,7 @@ namespace CapMgr
 
         std::ostringstream& Get(TLogLevel level=DEBUG)
         {
-            os << "[CAPMGR - " << NowTime();
-            os << " " << ToString(level) << "]: ";
+            os << "[" << NowTime() << " - CAPMGR:" << ToString(level) << "]: ";
             os << std::string(level > VERBOSE ? level - VERBOSE : 0, '\t');
             return os;
         }

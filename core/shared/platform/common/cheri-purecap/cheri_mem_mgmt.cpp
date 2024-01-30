@@ -5,6 +5,7 @@
 
 /* C API & C++ Definition for the CheriMemMgr */
 
+#include "cheri_mem_wrapper.h"
 #include "cheri_mem_mgmt.h"
 #include "cheri_mem_mgmt_c_api.h"
 
@@ -77,16 +78,13 @@ void* __capability CheriMemMgr::cheri_malloc(size_t sz_bytes)
     LOG_VERBOSE("cheri_malloc() called: alloc %d bytes", sz_bytes);
 
 #if ENABLE_CHERI_PURECAP
-    void *addr = malloc(sz_bytes);
+    void *addr = cheri_malloc_wrapper(sz_bytes);
 #else
     void* allocd_p = malloc(sz_bytes);
     void *__capability addr = cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
 #endif
     if (addr)
     {
-        // Sort out perms
-        addr = cheri_perms_clear(addr, ARM_CAP_PERMISSION_EXECUTIVE);
-
         if (TRACE_MEM)
         {
             curr_native_heap_used += get_actual_alloc_size(addr);
@@ -107,7 +105,7 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
     LOG_VERBOSE("cheri_realloc() called: realloc %d bytes", sz_bytes);
 
 #if ENABLE_CHERI_PURECAP
-    void *addr = realloc(ptr, sz_bytes);
+    void *addr = cheri_realloc_wrapper(ptr, sz_bytes);
 #else
     void* allocd_p = realloc((void*)cheri_address_get(ptr), sz_bytes);
     void *__capability addr = cheri_address_set(cheri_ddc_get(), (uintptr_t)allocd_p);
@@ -115,8 +113,6 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
 
     if (TRACE_MEM)
     {
-        addr = cheri_perms_clear(addr, ARM_CAP_PERMISSION_EXECUTIVE);
-
         curr_native_heap_used -= get_actual_alloc_size(ptr);
         curr_native_heap_used += get_actual_alloc_size(addr);
 
@@ -144,7 +140,7 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
     }
 
 #if ENABLE_CHERI_PURECAP
-    free(ptr);
+    cheri_free_wrapper(ptr);
 #else
     free((void*)cheri_address_get(ptr));
 #endif
@@ -157,6 +153,9 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
      LOG_DEBUG("WAMR-app: allocates linear memory of size %d", sz);
      LOG_VERBOSE("TODO: set this up from a central map, restricted to the module sandbox");
 
+#if ENABLE_CHERI_PURECAP
+     return cheri_alloc_linear_mem_wrapper(sz);
+#else
      auto ptr = cheri_malloc(sz);
 
      if (ptr)
@@ -164,6 +163,7 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
          std::memset(ptr, 0, sz);
      }
      return ptr;
+#endif
  }
 
  void CheriMemMgr::setup_wasm_stack()
@@ -179,19 +179,13 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
          // Allocate the actual stack.  Note - to avoid the top boundary being out of bounds, allocate extra space
          // Also allocate stack struct
 #if ENABLE_CHERI_PURECAP
-         m_stack = new uint8[m_stack_size.Get() + CHERI_ALIGNMENT];
-         m_stack_struct = new WASMCheriStack_t{};
+         m_stack = reinterpret_cast<uint8_t*>(cheri_alloc_stack_wrapper(m_stack_size.Get() + CHERI_ALIGNMENT));
+         m_stack_struct = reinterpret_cast<WASMCheriStack_t*>(cheri_malloc_wrapper(sizeof(WASMCheriStack_t)));
 
 #else
          m_stack = (uint8_t * __capability)cheri_address_set(cheri_ddc_get(), (uintptr_t)new uint8[m_stack_size.Get() + CHERI_ALIGNMENT]);
          m_stack_struct = (WASMCheriStack_t * __capability)cheri_address_set(cheri_ddc_get(), (uintptr_t)new WASMCheriStack_t{});
 #endif
-
-         // Zero the stack before we use it
-         std::memset(m_stack, 0, m_stack_size.Get() + CHERI_ALIGNMENT);
-
-         
-         m_stack = cheri_perms_and(m_stack, WASM_STACK_PERMS);
 
          // Setup
          m_stack_struct->bottom = m_stack;
@@ -239,7 +233,12 @@ void CheriMemMgr::cleanup_wasm_stack()
             curr_native_heap_used -= get_actual_alloc_size(m_stack_struct);
             alloc_count--;
         }
+
+#if ENABLE_CHERI_PURECAP
+        cheri_free_wrapper(m_stack_struct);
+#else
         delete m_stack_struct;
+#endif
         m_stack_struct = nullptr;
     }
 
@@ -251,7 +250,11 @@ void CheriMemMgr::cleanup_wasm_stack()
             alloc_count--;
         }
 
+#if ENABLE_CHERI_PURECAP
+        cheri_free_stack_wrapper(m_stack);
+#else
         delete[] m_stack;
+#endif
         m_stack = nullptr;
     }
 

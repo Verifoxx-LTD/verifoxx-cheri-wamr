@@ -297,13 +297,6 @@ extern "C" void CompartmentUnwrap(void* comp_data_object)
     // Create the service call proxy
     g_service_call_proxy = std::make_unique<CServiceCallProxy>(comp_fn_data);
 
-
-    /********* TEST *************/
-    std::cout << "Test callback capmgr service: cheri_malloc() faked" << std::endl;
-    void *returned = CServiceCallProxy::GetInstance()->cheri_malloc(120);
-    std::cout << "Test callback capmgr service: cheri_malloc() faked RETURNED: " << returned << std::endl;
-    /********* END TEST *********/
-
     LOG_VERBOSE("Call WAMR function in compartment");
 
     // Get compartment data to call implementation specific function

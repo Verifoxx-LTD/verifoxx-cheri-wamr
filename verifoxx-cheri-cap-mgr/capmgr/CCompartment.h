@@ -3,7 +3,7 @@
 #ifndef _CCOMPARTMENT_H__
 #define _CCOMPARTMENT_H__
 
-#include <exception>
+#include <stdexcept>
 #include <memory>
 
 #include "comp_common_defs.h"

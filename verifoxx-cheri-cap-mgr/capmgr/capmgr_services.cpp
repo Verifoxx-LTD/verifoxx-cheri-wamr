@@ -8,7 +8,7 @@
 #include "CCapMgrServiceData.h"
 #include "CCapMgrLogger.h"
 #include "comp_common_asm.h"
-
+#include "cheri_mem_wrapper.h"
 
 using namespace CapMgr;
 
@@ -24,7 +24,7 @@ static uintptr_t CallServiceFunction(CCapMgrServiceData* p)
         auto p_d = static_cast<CCheriMallocCapMgrServiceData*>(p);
         auto real_fp = reinterpret_cast<ServiceHandlerCheriMallocFp>(p_d->fp);
 
-        L_(DEBUG) << "Calling cheri_malloc()";
+        L_(DEBUG) << "Calling cheri_malloc_wrapper()";
         result = (uintptr_t)real_fp(p_d->sz_bytes);
     }
     break;
@@ -34,8 +34,28 @@ static uintptr_t CallServiceFunction(CCapMgrServiceData* p)
         auto p_d = static_cast<CCheriReallocCapMgrServiceData*>(p);
         auto real_fp = reinterpret_cast<ServiceHandlerCheriReallocFp>(p_d->fp);
 
-        L_(DEBUG) << "Calling cheri_realloc()";
+        L_(DEBUG) << "Calling cheri_realloc_wrapper()";
         result = (uintptr_t)real_fp(p_d->ptr, p_d->sz_bytes);
+    }
+    break;
+
+    case ServiceCall_cheri_alloc_linear_mem:
+    {
+        auto p_d = static_cast<CCheriAllocLinearMemCapMgrServiceData*>(p);
+        auto real_fp = reinterpret_cast<ServiceHandlerCheriAllocLinearMemFp>(p_d->fp);
+
+        L_(DEBUG) << "Calling cheri_alloc_linear_mem_wrapper()";
+        result = (uintptr_t)real_fp(p_d->sz_bytes);
+    }
+    break;
+
+    case ServiceCall_cheri_alloc_stack:
+    {
+        auto p_d = static_cast<CCheriAllocStackCapMgrServiceData*>(p);
+        auto real_fp = reinterpret_cast<ServiceHandlerCheriAllocStackFp>(p_d->fp);
+
+        L_(DEBUG) << "Calling cheri_alloc_stack_wrapper()";
+        result = (uintptr_t)real_fp(p_d->sz_bytes);
     }
     break;
 
@@ -44,8 +64,18 @@ static uintptr_t CallServiceFunction(CCapMgrServiceData* p)
         auto p_d = static_cast<CCheriFreeCapMgrServiceData*>(p);
         auto real_fp = reinterpret_cast<ServiceHandlerCheriFreeFp>(p_d->fp);
 
-        L_(DEBUG) << "Calling cheri_free()";
-        result = (uintptr_t)real_fp(p_d->ptr);
+        L_(DEBUG) << "Calling cheri_free_wrapper()";
+        real_fp(p_d->ptr);
+    }
+    break;
+
+    case ServiceCall_cheri_free_stack:
+    {
+        auto p_d = static_cast<CCheriFreeStackCapMgrServiceData*>(p);
+        auto real_fp = reinterpret_cast<ServiceHandlerCheriFreeStackFp>(p_d->fp);
+
+        L_(DEBUG) << "Calling cheri_free_stack_wrapper()";
+        real_fp(p_d->ptr);
     }
     break;
 

@@ -28,7 +28,7 @@ static std::string print_extref(uintptr_t p)
     std::stringstream strstr;
     char arr[120];
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
     snprintf(arr, sizeof(arr), "%#p", (void*)p);
 #else
     snprintf(arr, sizeof(arr), "%p", (void*)p);

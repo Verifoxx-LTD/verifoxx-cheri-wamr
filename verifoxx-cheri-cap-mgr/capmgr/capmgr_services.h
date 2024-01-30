@@ -12,9 +12,6 @@ extern "C"
     #include <stdint.h>
 
     uintptr_t CompartmentServiceHandler(void* service_data_object);
-    void* cheri_malloc(size_t sz_bytes);
-    void* cheri_realloc(void* ptr, size_t sz_bytes);
-    void cheri_free(void* ptr);
 
 #ifdef __cplusplus
 }

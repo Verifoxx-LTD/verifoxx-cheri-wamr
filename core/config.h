@@ -451,8 +451,22 @@
 #define WASM_ENABLE_WASM_CACHE 0
 #endif
 
+#ifndef ENABLE_CHERI_PURECAP
+#define ENABLE_CHERI_PURECAP 0
+#endif
+
 #ifndef AOT_CHERI_PTR_SIZE
 #define AOT_CHERI_PTR_SIZE 0
+#endif
+
+/* ENABLE_CHERI_COMPARTMENT defined when code is built to a compartment */
+#ifndef ENABLE_CHERI_COMPARTMENT
+#define ENABLE_CHERI_COMPARTMENT 0
+#endif
+
+/* ENABLE_CHERI_CAPMGR defined when code is built to the capability manager */
+#ifndef ENABLE_CHERI_CAPMGR
+#define ENABLE_CHERI_CAPMGR 0
 #endif
 
 #endif /* end of _CONFIG_H_ */

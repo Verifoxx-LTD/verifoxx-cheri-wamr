@@ -3,7 +3,11 @@
 #ifndef _SERVICECALL_PROXY_H__
 #define _SERVICECALL_PROXY_H__
 
-#include <exception>
+#if !ENABLE_CHERI_PURECAP || !ENABLE_CHERI_COMPARTMENT || ENABLE_CHERI_CAPMGR
+#error "Bad make definitions; compartment must have ENABLE_CHERI_PURECAP=1, ENABLE_CHERI_COMPARTMENT=1 and ENABLE_CHERI_CAPMGR=0"
+#endif
+
+#include <stdexcept>
 #include <string>
 #include <memory>
 
@@ -20,6 +24,7 @@ public:
     {
     }
 };
+
 
 class CServiceCallProxy
 {
@@ -77,22 +82,41 @@ public:
     }
 
     template <typename... Args>
-    void *cheri_malloc(Args&&... args)
+    void *cheri_malloc_wrapper(Args&&... args)
     {
         return (void*)CallServiceFn<CCheriMallocCapMgrServiceData>(__func__, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void *cheri_realloc(Args&&... args)
+    void *cheri_realloc_wrapper(Args&&... args)
     {
         return (void*)CallServiceFn<CCheriReallocCapMgrServiceData>(__func__, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
-    void *cheri_free(Args&&... args)
+    void* cheri_alloc_linear_mem_wrapper(Args&&... args)
     {
-        return (void*)CallServiceFn<CCheriFreeCapMgrServiceData>(__func__, std::forward<Args>(args)...);
+        return (void*)CallServiceFn<CCheriAllocLinearMemCapMgrServiceData>(__func__, std::forward<Args>(args)...);
     }
+
+    template <typename... Args>
+    void* cheri_alloc_stack_wrapper(Args&&... args)
+    {
+        return (void*)CallServiceFn<CCheriAllocStackCapMgrServiceData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    void cheri_free_wrapper(Args&&... args)
+    {
+        CallServiceFn<CCheriFreeCapMgrServiceData>(__func__, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    void cheri_free_stack_wrapper(Args&&... args)
+    {
+        CallServiceFn<CCheriFreeStackCapMgrServiceData>(__func__, std::forward<Args>(args)...);
+    }
+
 };
 
 #endif /* _SERVICECALL_PROXY_H__ */

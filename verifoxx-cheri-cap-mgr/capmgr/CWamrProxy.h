@@ -3,6 +3,11 @@
 #ifndef _CWAMRPROXY_H__
 #define _CWAMRPROXY_H__
 
+// Sanity check on build flags
+#if !ENABLE_CHERI_PURECAP || !ENABLE_CHERI_CAPMGR || ENABLE_CHERI_COMPARTMENT
+#error "Bad make definitions; capability manager must have ENABLE_CHERI_PURECAP=1, ENABLE_CHERI_CAPMGR=1 and ENABLE_CHERI_COMPARTMEMT=0"
+#endif
+
 #include <string>
 #include <memory>
 
