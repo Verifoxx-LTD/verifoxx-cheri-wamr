@@ -5,7 +5,7 @@
 
 #include "platform_api_vmcore.h"
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
 #include <sys/mman.h>
 #include "bh_log.h"
 #endif
@@ -135,7 +135,7 @@ os_mmap(void *hint, size_t size, int prot, int flags)
         /* try 5 times */
         for (i = 0; i < 5; i++) {
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
             // For CHERI pure-cap we must request full access and use mprotect to adjust
             // Otherwise the capability returned has no r/w/x permissions
 			LOG_DEBUG("CHERI-PURECAP mode calls mmap() with full access and mprotect() with flags: %x\n", map_prot);

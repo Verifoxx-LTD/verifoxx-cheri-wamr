@@ -4255,7 +4255,7 @@ typedef void (*GenericFunctionPointer)();
 void
 invokeNative(GenericFunctionPointer f, uint64 *args, uint64 n_stacks);
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
 typedef float64 (*Float64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef float32 (*Float32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);

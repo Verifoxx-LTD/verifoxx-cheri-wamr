@@ -10,7 +10,7 @@
 #include "platform_api_extension.h"
 
 #if ENABLE_CHERI_PURECAP
-#include "cheri_compartment_temp_syscalls.h"
+#include "cheri_syscalls.h"
 #endif
 
 typedef struct {

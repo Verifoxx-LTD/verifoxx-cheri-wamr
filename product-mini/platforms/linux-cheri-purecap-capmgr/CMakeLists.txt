@@ -348,6 +348,9 @@ target_include_directories(${WAMR_LIB} PRIVATE
     ${COMPARTMENT_INC_FOLDERS}
 )
 
+# Library needs to enable purecap flag and is code which runs in a compartment
+target_compile_definitions(${WAMR_LIB} PUBLIC ENABLE_CHERI_PURECAP=1 ENABLE_CHERI_COMPARTMENT=1)
+
 set_target_properties (libiwasm PROPERTIES OUTPUT_NAME iwasm)
 
 # In the case that fast interp is used, and we have debug mode, we need to optimise the file size as
@@ -370,6 +373,9 @@ set_property(TARGET ${WAMR_EXE}  PROPERTY CXX_STANDARD 14)
 
 target_link_options(${WAMR_EXE} PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker iwasm.map")
 
+# Capmgr exe needs to enable purecap flag and is code which runs in the capability manager executable
+target_compile_definitions(${WAMR_EXE} PUBLIC ENABLE_CHERI_PURECAP=1 ENABLE_CHERI_CAPMGR=1)
+
 # Cap manager static build or not
 if (CHERI_STATIC_BUILD)
     target_compile_definitions(${WAMR_EXE} PUBLIC CAPMGR_BUILT_STATIC_ENABLE=1)
@@ -382,12 +388,14 @@ target_include_directories(${WAMR_EXE} PRIVATE
     ${CAPMGR_INC_FOLDERS}
     ${UTILS_INC_FOLDERS}
     ${COMMON_INC_FOLDERS}
+    ${PLATFORM_SHARED_INCLUDE_CAPMGR_FOLDER}
 )
 
 target_sources(${WAMR_EXE} PRIVATE
     ${CAPMGR_FILES}
     ${UTILS_FILES}
     ${COMMON_FILES}
+    ${PLATFORM_SHARED_CAPMGR_FILES}
     ${CMAKE_CURRENT_LIST_DIR}/main.cpp
 )
 

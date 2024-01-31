@@ -1,14 +1,23 @@
 VERIFOXX-CHERI-WAMR
 ===================
 
-**This integration branch will by default build the Capability Manager Executable and WAMR run in a shared library compartment.  As well as the instructions below, please refer to [CHERI-WAMR Capability Manager](./verifoxx-cheri-cap-mgr/README.md) for additional instructions.**
-
 This is a private "fork" of the WebAssembly Micro Runtime Repository which is modified to be CHERI-capability-aware and support features to compartmentalise executed WASM.
 The version in "main" will build the iwasm program (VM Core) for both CHERI Hybrid and pure-cap on Linux, but note the pure-cap version is very cut down and is likely to only run the simplest WASM code!
 
 The version in "develop" is latest completed changes representing the port to CHERI Morello Linux.
 Interpreter mode is supported, both Fast and Classic, and all build-time flags apart from WAMR_BUILD_DEBUG_INTERP.
-AOT and JIT are not supported currently.
+AOT mode is supported, JIT mode is not supported.
+
+An experimental compartmentalised WAMR is additionally supported - this is implemented as a separate "mini-product".  This utilises *iwasm* as a capability manager executable which manages a compartment that contains all WAMR code.
+All WAMR API calls therefore take place via a switch to the compartment.  During a WAMR function processing, the function can "call back" to a service in the compartment to perform system functions such as allocating memory.
+Note this work is very much in progress and therefore the compartment product does not have as much functional support as the main WAMR port to CHERI.  The following are not currently supported in the compartmentalised version:
+- AOT mode
+- Calling native functions in a loaded library ("*native-lib*" option) (including building a native test library)
+- Most system functions are not moved to the capability manager
+- The full WAMR API is not supported (only a subset to implement *iwasm*)
+- Building with the LLVM toolchain is not supported yet, only GNU/GCC is supported
+
+**Note: The compartmentalised version is only available in pure-cap, hybrid-cap cannot be supported*
 
 ## Building CHERI-WAMR with CMake
 You can build from the root folder directly with CMake, but this requires a number of flags to configure WAMR and the build system.
@@ -19,26 +28,39 @@ It is therefore recommended to consult *./build_iwasm.sh* which allows you to co
 - AOT_CHERI_PTR=[0|8|16]		(set to 0 when building CHERI pure-cap, set to pure-cap native pointer size when building other architectures.  **Must match setting used to build WAMRc**.)
 - WAMR_EXTERNREF_APP=[0|1]  (set to 1 to build a native executable for externref testing INSTEAD of building WAMR.  Defaults to build WAMR.)
 - INSTALL_PREFIX=<install folder>	(where you want output to be written from cmake *--install*)
+- CHERI_STATIC_BUILD=[0|1]	(set to 0 to build dynamic iwasm which requires e.g libc available at runtime.  Default to static.)
 
 This bash script assumes you will be using a toolchain file, see below for more on tihs.
+
+### Supported WAMR Mini-Products
+The CMake flag WAMR_BUILD_PLATFORM determines which product platform to build for, these map to a folder in the WAMR source tree.
+For CHERI-WAMR we derive products from *linux* which is a native Linux build (e.g on x86_64 platforms).
+
+The following are supported:
+- WAMR_BUILD_PLATFORM=linux-cheri-purecap          : The standard CHERI port of WAMR, enables you to build either pure-cap or hybrid-cap WAMR
+- WAMR_BUILD_PLATFORM=linux-cheri-purcap-capmgr    : The experimantal compartmentalised version which builds iwasm as a capability manager executable, and WAMR into a dynamic shared object library (libiwasm.so)
 
 ### The Toolchain File on CHERI platforms
 The Cmake build can use the toolchain file *toolchain.cmake* to build for CHERI platforms.  You should edit this file accordingly to specify the path to the GCC and GCC compiler binaries.
 The default provided assumes that their location is on your path.
 
-To use the toolchain file for CHERI you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain.
+To use the toolchain file for CHERI you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain, or CHERI_LLVM_TOOLCHAIN_DIR, which is the root of the LLVM toolchain, as applicable.
 
-**Use of the toolchain file is optional**.  If you do not use the toolchain file, the cmakelists.txt will attempt to resolve your GNU compilers based on the architecture you are running on.
+**Use of the toolchain file is optional**.  If you do not use the toolchain file, the CMakelists.txt will attempt to resolve your compilers based on the architecture you are running on.
 If this is aarch64 then it assumes you are building on the morello board.  Otherwise, it assumes you are cross-compiling.
 
-You will though need to provide the path to the GNU toolchain root, if they are not on your path.
-You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* as a Cmake argument.
+You will though need to provide the path to the GNU or LLVM toolchain root if they are not on your path.
+You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* or *-DCHERI_LLVM_TOOLCHAIN_DIR=/path/to/llvm/root* as a Cmake argument.
+
+**Note: LLVM toolchain port for CHERI uses MUSL C library. When using LLVM, to specify a MUSL root folder, use the flag CHERI_MUSL_TOOLCHAIN_DIR for example *-DCHERI_MUSL_TOOLCHAIN_DIR=/path/to/musl/root*.**
 
 ### The Toolchain File on Linux x86_64 native platforms
-A basic toolchain file is also provided to build for *Linux* on non-CHERI (assumed to be x86_64) platforms.
+A basic toolchain file is also provided for GNU and LLVM to build for *Linux* on non-CHERI (assumed to be x86_64) platforms.
 This can be used to build a baseline test-harness for Linux that can run natively.
 
 ### Native Test Harness Library
+**Note: Native Test Library not currently supported on the compartmentalised / capability manager WAMR.**
+
 To call from WASM -> native or native -> WASM requires an implementation of suitable native functions which need to be known by WAMR.
 *iwasm* handles this by loading a DLL (linux shared object library) at runtime and discovering native functions.
 
@@ -51,8 +73,9 @@ The root CMakeLists.txt will build the native libs shared object after building 
 ### Building without the bash script
 ``` Bash
 mkdir build && cd build
-cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>] -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> \
-	-DWAMR_BUILD_PLATFORM=linux-cheri-purecap [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] \
+cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>|-DCHERI_LLVM_TOOLCHAIN_DIR=<path> -DCHERI_MUSL_TOOLCHAIN_DIR=<path>] \
+     -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> \
+	-DWAMR_BUILD_PLATFORM=[linux-cheri-purecap|linux-cheri-purecap-capmgr] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] \
 	-DWAMR_BUILD_AOT_CHERI_PTR=[0|8|16] -DWAMR_BUILD_AOT_EXCEPTION_WORKAROUND=[0|1] [-DWAMR_EXTERNREF_APP=0|1][<wamr-build-flags>]
 
 cmake --build .
@@ -60,7 +83,7 @@ cmake --install .
 ```
 
 Where:
-- WAMR_BUILD_PLATFORM is required, for CHERI this must be "linux-cheri-purecap"
+- WAMR_BUILD_PLATFORM is required, for CHERI this must be "linux-cheri-purecap" for the main port, or "linux-cheri-purecap-capmgr" for the experimantal compartmentalisation CHERI-WAMR.
 - CHERI_GNU_TOOLCHAIN_DIR is path to the morello gnu toolchain root on the build machine, not required if folder containing binaries is on your bash path OR you are using a toolchain file
 - CHERI_PURECAP is 1 for purecap builds and 0 for hybrid capability builds (default 1)
 - CHERI_STATIC_BUILD is 1 for making a static executable, 0 for requiring .so libs (default 1)
@@ -71,15 +94,21 @@ Where:
 - <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).
 
 
-**Note:** For CHERI Morello WAMR build options contain some restrictions:
+**Note:** For CHERI Morello, WAMR build options contain some restrictions:
 - JIT mode is not supported so must be 0
 - WAMR_BUILD_DEBUG_INTERP is not yet supported
 - WAMR_BUILD_SIMD must be 0
 - WAMR_DISABLE_HW_BOUND_CHECK must be 1
 
+**Note:** For *linux-cheri-purecap-capmgr* the following must at this time be set otherwise WAMR will not build or run correctly:
+- WAMR_BUILD_AOT=0
+- WAMR_EXTERNREF_APP=0
+- WAMR_BUILD_NATIVE_TEST_LIB=0
+- CHERI_PURECAP=1
+
 ### Bulding on the Morello Target
 This document assumes you will be cross-compiling, however you can build on the Morello target itself.
-To do this *either* update the *toolchain.cmake* file *or* supply the CHERI_GNU_TOOLCHAIN_DIR flag if the GNU toolchain is not on your path (on the Morello board).
+To do this *either* update the *toolchain.cmake* file *or* supply the CHERI_[GNU|LLVM]_TOOLCHAIN_DIR flag if the GNU toolchain is not on your path (on the Morello board).
 The cmake script will then resolve the correct toolchain binaries, as if the architecure where it is being run is aarch64 then it is assumed to be building on the morello target.
 Otherwise, it will cross-compile.
 
@@ -88,9 +117,11 @@ Otherwise, it will cross-compile.
 The file *CMakePresets.json* is provided to support visual studio C++ CMake remote builds on a Linux Ubuntu machine running under WSL2.
 This provides separate configurations for:
 - Hybrid Debug
-- PureCap Debug
+- PureCap Debug (Standard CHERI port)
+- PureCap CapMgr Debug (Experimental compartmentalised CHERI port)
 - Hybrid Release
-- PureCap Release
+- PureCap Release (Standard CHERI port)
+- PureCap CapMgr Release (Experimental compartmentalised CHERI port)
 - Linux x86_64 Debug (a non-CHERI baseline for santity testing)
 - Linux x86_64 Release (a non-CHERI baseline for santity testing)
 - Externref_App_Purecap (build a separate, standalone native exe for externref testing instead of WAMR (on Morello purecap))
@@ -101,21 +132,25 @@ To use VS with CMake and this project "out of the box" you will need to have fir
 2. Install CMake on the Ubuntu machine, you will need version 3.19 or newer (note: not 100% guaranteed to work with earlier than 3.24!)
 3. Set up the Arm Morello GNU Toolchain on your WSL2 distribution for cross-compilation to Morello (i.e linux-x86_64 -> aarch64(+c64))
 4. Add the path to the GNU toolchain binaries (gcc, g++ etc.) to your sign-on bash shell path (e.g in .bashrc)
-5. Add *export CHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/toolchain/root* to your sign-on bash shell path (e.g in .bashrc)
+5. Add *export CHERI_GNU_TOOLCHAIN_DIR=/path/to/toolchain/root*, or *export CHERI_LLVM_TOOLCHAIN_DIR=/path/to/toolchain/root* and *export CHERI_MUSL_TOOLCHAIN_DIR=/path/to/musl/root*, to your sign-on bash shell path (e.g in .bashrc)
 5. Install Visual Studio 2019 or newer with the C++ for Linux / CMake component
 
 ### Launching the project
 In Visual Studio, select to open and choose CMake and then locate the *CMakeLists.txt* in the WAMR root folder.  Visual Studio will automatically detect the CMakePresets.json.
 
 You must then select the your Ubuntu machine as the build target.  You can then choose your configuration, the following are available:
-- Debug armC64 Hybrid		(internal name "ARMc64-hybrid-debug")
-- Debug armC64+ PureCap		(internal name "ARMc64-PureCap-debug")
-- Release armC64 Hybrid		(internal name "ARMc64-hybrid-release")
-- Release armC64+ PureCap	(internal name "ARMc64-PureCap-release")
-- Linux Debug x86_64		(internal name "Linux_x86_64_Debug")
-- Linux Release x86_64		(internal name "Linux_x86_64_Release")
-- Externref_App_Purecap     (internal name "Externref_App_Purecap")
-- Externref_App_x86_64      (internal name "Externref_App_x86_64")
+- Debug armC64 Hybrid			(internal name "ARMc64-hybrid-debug")
+- Debug armC64+ PureCap			(internal name "ARMc64-PureCap-debug")
+- Debug armC64+ CapMgr PureCap	(internal name "ARMc64-PureCap-CapMgr-debug")
+- Release armC64 Hybrid			(internal name "ARMc64-hybrid-release")
+- Release armC64+ PureCap		(internal name "ARMc64-PureCap-release")
+- Release armC64+ CapMgr PureCap(internal name "ARMc64-PureCap-CapMgr-release")
+- Linux Debug x86_64			(internal name "Linux_x86_64_Debug")
+- Linux Release x86_64			(internal name "Linux_x86_64_Release")
+- Externref_App_Purecap     	(internal name "Externref_App_Purecap")
+- Externref_App_x86_64      	(internal name "Externref_App_x86_64")
+
+**NOTE:** CapMgr PureCap versions are for the experimental compartmentalisation CHERI-WAMR, other PureCap versions are for the standard CHERI-WAMR port.
 
 All options are then set up correctly.  Visual Studio will automatically build makefiles via CMake and you can build the codebase.
 **NOTE:** Please modify the following flags as necessary to configure your build:
@@ -207,6 +242,65 @@ Where:
 
 You can now proceed to select debug target as per *name*, above, and then debug.  The process will launch remotely on the Morello board connecting across your internal network.
 
+##### Enhanced Visual Studio Debug Configuration
+You can define additional debug configurations.  For example, you may have a separate configuration for the experiemental compartmentalisation version of *iwasm*.
+As this requires a shared object (.so) at runtime which contains the WAMR compartment code, it is beneficial to have the debug step automatically copy files to the remote target.
+
+The configuration shown below will achieve this:
+
+``` JSON
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+	  "name": "Morello CAP-MGR",
+      "args": [
+        "-v=5",
+        "/root/helloworld.wasm"
+      ],
+      "cwd": "/purecap-lib",
+      "debuggerConfiguration": "gdb",
+      "env": {},
+      "gdbPath": "/root/morello_gnu/bin/aarch64-none-linux-gnu-gdb",
+      "project": "CMakeLists.txt",
+      "projectTarget": "iwasm",
+      "remoteMachineName": "192.168.0.39",
+      "type": "cppgdb",
+      "targetArchitecture": "arm64",
+      "externalConsole": true,
+      "deployDirectory": "/purecap-lib",
+      "deployDebugRuntimeLibraries": "true",
+      "disableDeploy": false,
+      "program": "/purecap-lib/iwasm",
+      "MIMode": "gdb",
+      "miDebuggerServerAddress": "192.168.0.39",
+      "deploy": [
+        {
+          "targetMachine": "192.168.0.39",
+          "sourcePath": "${cmake.remoteBuildRoot}/linux-cheri-purecap-capmgr/libiwasm.so",
+          "targetPath": "/purecap-lib/libiwasm.so",
+          "deploymentType": "RemoteRemote",
+          "executable": false
+        },
+        {
+          "targetMachine": "192.168.0.39",
+          "sourcePath": "${cmake.remoteBuildRoot}/linux-cheri-purecap-capmgr/iwasm",
+          "targetPath": "/purecap-lib/iwasm",
+          "deploymentType": "RemoteRemote",
+          "executable": true
+        }
+      ]
+    }
+  ]
+}
+```
+This version will deploy both *iwasm* (capability manager iwasm executable) and *libiwasm.so* (WAMR compartment library) to a folder */purecap-lib*.  This folder is what was set as the library RPATH so that WAMR can find all other dynamic shared objects at runtime.
+
+The *deploy* settings tell Visual Studio the files to be copied to the remote machine - these are sourced from the default build folder for *linux-cheri-purecap-capmgr*.
+
+This configruation is named "Morello CAP-MGR".  Therefore if you have a "Morello Target" configuration this can be used to debug standard WAMR, and "Morello CAP-MGR" can be used for the experimental capability manager / commpartments version.
+
 #### Debugging and Intellisense Operation
 There are limitations to how well intellisense and debugging can work with Visual Studio, because it has to be told the architecture is Arm64 and it doesn't know about Morello.
 
@@ -217,7 +311,96 @@ However, the CMakePresets.json has been specifically set up - and this is why it
 
 The only real problem is that compiler builtins which are pure-cap specific will likely not work.
 
-## WAMR Front-end
+## Experimental Compartmentalised WAMR
+The experimental version of CHERI-WAMR is added as the separate product *linux-cheri-purcap-capmgr* to avoid corrupting the main CHERI-WAMR port.
+This product builds an executable, iwasm, and a dynamic shared object library, libiwasm.so.  The executable is a capability manager which will dynamically load (via dlopen()) the WAMR library at runtime.
+
+The iwasm executable manages a single CHERI compartment within which all WAMR API functions are run.  Each call to a WAMR function involves a switch from the capability manager into the compartment, then the function is executed, and then execution returns to the capability manager.  At the moment only a single compartment is implemented.
+
+The capability manager runs in the Morello Executive PE state and all compartment functions run in the Restricted PE state.  To support this, all global code and data symbols implemented in the compartment library need to be patched after the library is first loaded, as by default the dynamic loader will resolve all the symbol addresses with a capability that has the executive permissions and bounds set to the executable.  This "symbol relocation patching" is performed by the capability manager executable after the library is first loaded.
+
+Additionally, during processing a WAMR function in the compartment it may be necessary to call a "service" within the capability manager.  This needs to be done whenever there is a native or system call that can only be performed from the executive PE state.
+This is supported via a framework which allows for a call back into the capability manager to run a particulr service, before then returning to the compartment.
+Currently, memory allocation are the only services which make use of this mechanism.
+
+**NOTE:** System calls should not be possible from within the compartment, but currently we still make use of this because the Arm Linux port does not prevent said calls from the PE restricted state.
+
+### Runtime Changes to iwasm Program
+This experiemental version of iwasm introduces a modified command-line option and a new command-line option.  With reference to *iwasm* usage information, the following are changed:
+
+``` Bash
+iwasm [--wamr-lib=/path/to/libiwasm.so] [-v=0|1|2|3|4|5|6]
+```
+
+Where:
+- *--wamr-lib* is a new optional argument which specifies the name of the WAMR compartment shared object library to load at runtime.  The default value is *./libiwasm.so* i.e libiwasm.so in the current directory.
+- *-v=6* is a new debug level which is identical to the WAMR verbose level of 5, but additionally causes the capability manager to dump all symbol relocation tables parsed from the libiwasm.so ELF
+
+### Toolchain Support
+At the current time LLVM is not supported, therefore the GNU toolchain is required.  LLVM support will need to deal with the differences in how symbol relocation is performed when a shared object is loaded at runtime.
+
+### Install Location
+Performing the install step (e.g "install iwasm" from Visual Studio, or *cmake --install* from command-line) will generate:
+- <install-dir>/bin/iwasm
+- <install-dir>/lib/libiwasm.so
+
+By default, <install-dir> will be *${HOME}/install/ARMc64-PureCap-CapMgr-debug*.
+
+### Static or Dynamic Capability Manager
+The capability manager can either be built to be a statically linked executable or a dynamically linked executable.
+This is controlled with the **CHERI_STATIC_BUILD** CMake flag.
+The default is statically linked, and at the time this is recommended.  Dynamically linked executable is likely to be needed in the future, when libraries for which there is not a static version will be needed.
+
+Note that the WAMR compartment library (libiwasm.so) has to always be built dynamically.
+
+#### Implications of Dynamic Capability Manager Executable
+If the capability manager is build to a dyanmic executable then all dependent libraries must be loaded at runtime, as is the case for the libiwasm.so WAMR library.
+However the same copy of depedent libraries cannot be used by the executable and the libiwasm.so, because they run in different PE states.
+Therefore if the capability manager executable is built dynamic, the libiwasm.so library is loaded to a different namespace (via Linux system call *dlmopen()*) which will cause multiple versions of dependent libraries (such as libc.so) to be loaded.  This is all handled by the capability manager.
+
+### Library Search Path
+The WAMR library requires other shared object libraries (e.g libC) at runtime.  As these need to be a PureCap flavour, the default search path cannot be used therefore the search path must be specified.
+By default, this is */purecap-lib* on the Morello box.  **It is recommended that all libraries and capability manager iwasm executable are placed in this same folder, to make things easier during development.**
+
+If you want to change the search path, modify the following flag in *CMakePresets.json*:
+- MORELLO_PURECAP_LIBS_FOLDER=your/path/here
+
+**NOTE: If the capability manager executable is dynamically linked, it will search for needed libraries in this folder as well.**
+
+### Capability Manager Logging
+The iwasm Capability Manager executable uses a separate logger to the WAMR library, but the logging levels are analagous to WAMR.  The level of both is controlled by the *-v=n* iwasm command-line argument.
+
+Note that at VERBOSE levels (> 4) a significant amount of logging is produced by the capability manager because all symbol reloctaion tables and patch-ups are logged.
+Note also that the log is not flushed each time and happens through separate mechanisms, therefore is is possible for a WAMR log point to be written before an earlier capability manager log point.
+
+### Source Code Changes for Compartmentalisation
+A new folder is created specifically for supporting the capability manager and compartment framework, this can be found in:
+./verifoxx-cheri-cap-mgr
+
+Subfolders within this are:
+- compartment/	: Compartment entry point and wrapper to call into a WAMR function
+- common/	: Code shared between compartment and capability manager
+- utils/	: Logger and utility classes for managing capabilities
+- capgmr/	: Capability Manager files including main(), within main.cpp
+- capmgr/cap_relocs/	: Responsible for patching relocation tables of loaded libraries
+- capmgr/cap_relocs/link_map_internal/	: Access to internal GNU libC structures that are not normally available through the Std C API
+
+Additionally, to support service callbacks for memory allocation and the now two CHERI related products, a shared folder is created for product platform specifics:
+./core/shared/platform/common/cheri-purecap
+
+With the specialisations in:
+- ./core/shared/platform/common/cheri-purecap
+- ./core/shared/platform/linux-cheri-purecap 		(standard CHERI-WAMR port)
+- ./core/shared/platform/linux-cheri-purecap-capmgr	(experiemental compartmentalised CHERI-WAMR)
+
+### Incomplete Functionality
+At the time of writing there are a number of features not supported by the experimantal capability manager and compartments port:
+- AOT mode is not supported yet (requires code changes to the internal PLT table in WAMR AOT handling)
+- User native library functions are not supported (requires code changes to be able to call back to capability manager service for native calls)
+- Most system calls / native calls (e.g WASI low-level calls) remain in compartment (only memory allocation calls back to capability manager; requires extensive changes to split WAMR into multiple parts)
+- Full WAMR API is not yet supported, so only iwasm calls can be used (means calling WAMR from a native application may be limited; would require additional WAMR functions to be compartmentalised)
+
+## WAMR-App Front-end
 **IMPORTANT: The separate front-end is now deprecated and should no longer be used**
 
 For development purposes a *Limited* WAMR front-end is provided which can be used instead of iwasm.  This is found in */front-end* folder.
@@ -241,6 +424,8 @@ Test native functions are included by building them into the wamr-app program.
 ## Externref Test Application
 The externref test application is a native application that embeds WAMR functionality.  It is needed for testing externrefs when it is not possible to call WASM -> native -> WASM, because the called native cannot create a full execution environment.
 Refer to [Externref Test Application](./tests/wamr-linux-cheri-purecap-tests/externref-app/README.md) for details.
+
+**NOTE:** The Extenref Test Application does not suppor the experiemental compartmentalised WAMR at this time.
 
 ## Using AOT Mode and Compatibility with WAMRc
 **Please also refer to [Building the AOT Compiler](./wamr-compiler/README.md) for more details on WAMRc support for CHERI.**

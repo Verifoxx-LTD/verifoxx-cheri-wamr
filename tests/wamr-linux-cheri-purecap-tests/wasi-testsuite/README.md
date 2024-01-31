@@ -158,3 +158,11 @@ The three skipped tests are:
 3. interesting_paths.wasm/.rs
 
 A Verifoxx JIRA ticket has been raised to cover explanation of why these are skipped.
+
+## Experimental CHERI-WAMR Compartmentalisation Testing
+The *linux-cheri-purecap-capmgr* product build generates the experimental iwasm capability manager and WAMR as libiwasm, a dynamic shared object library.
+This application can be tested with the WASI-TestSuite for CHERI Morello using the same methods as described above, but please note the following:
+
+1. The WASI Test Suite program does not support passing the new *--wamr-lib=<.so>* option, therefore ensure you place the *libiwasm.so* in the same folder as *iwasm* so it can be found using the default search path.
+2. AOT is not currently supported on this experimental product version, therefore use the *wamr-cheri.py* adapter and not *wamr-cheri-aot.py*.
+3. It is possible some tests may fail on the experimental platform as it is still a work in progress.
