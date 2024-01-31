@@ -74,7 +74,7 @@ gc_init_with_pool(char *buf, gc_size_t buf_size)
     }
 
 #if ENABLE_CHERI_PURECAP
-    base_addr = cheri_align_up(base_addr, GC_ALIGNMENT_SIZE_MASK) + GC_HEAD_PADDING;
+    base_addr = cheri_align_up(base_addr, GC_ALIGNMENT_SIZE) + GC_HEAD_PADDING;
 #else
     base_addr =
         (char*)(((uintptr_t)base_addr + GC_ALIGNMENT_SIZE_MASK) & (uintptr_t)~GC_ALIGNMENT_SIZE_MASK)

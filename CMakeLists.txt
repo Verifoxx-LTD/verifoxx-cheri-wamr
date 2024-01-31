@@ -30,5 +30,3 @@ elseif ( (NOT DEFINED WAMR_APP) OR (NOT WAMR_APP) )
 else ()
     add_subdirectory(frontend)
 endif ()
-
-

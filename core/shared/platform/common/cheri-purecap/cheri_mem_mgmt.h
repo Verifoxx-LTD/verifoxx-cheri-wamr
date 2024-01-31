@@ -42,10 +42,6 @@ private:
 #endif
 
     static constexpr size_t CHERI_ALIGNMENT = alignof(void* __capability);
-    static constexpr size_t WASM_STACK_PERMS =
-        CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | ARM_CAP_PERMISSION_MUTABLE_LOAD |
-        CHERI_PERM_STORE | CHERI_PERM_STORE_CAP | CHERI_PERM_STORE_LOCAL_CAP |
-        CHERI_PERM_GLOBAL;
 
     OptionalValue<uint32_t> m_stack_size;
     OptionalValue<uint32_t> m_heap_size;
