@@ -94,13 +94,13 @@ Where:
 - <wamr-build-flags> are any flags to configure WAMR (refer to WAMR build readme for more info).
 
 
-**Note:** For CHERI Morello WAMR build options contain some restrictions:
+**Note:** For CHERI Morello, WAMR build options contain some restrictions:
 - JIT mode is not supported so must be 0
 - WAMR_BUILD_DEBUG_INTERP is not yet supported
 - WAMR_BUILD_SIMD must be 0
 - WAMR_DISABLE_HW_BOUND_CHECK must be 1
 
-**Note:** For *linux-cheri-purecap-capmgr* the following must at this time be set otherwise WASMR will not build or run correctly:
+**Note:** For *linux-cheri-purecap-capmgr* the following must at this time be set otherwise WAMR will not build or run correctly:
 - WAMR_BUILD_AOT=0
 - WAMR_EXTERNREF_APP=0
 - WAMR_BUILD_NATIVE_TEST_LIB=0
