@@ -7,9 +7,11 @@ It is can be downloaded [here](https://github.com/WebAssembly/wasi-testsuite).
 WASI test suite uses adapters to run the underlying runtime (e.g the *iwasm* program) in a sub-process, these are python files designed to massage the arguments for the program being tested.
 In order to run the wasi-testsuite tests on Morello it is necessary to provide a *custom adapter file*.  This is because on Morello we must run the test environment locally on the host, but run the iwasm program remotely on Morello.  In the case of AOT testing, `wamrc` must also be run in order to compile the WASM test vector file to an AOT file.  The compilation can either be done locally or on a second remote machine.
 
-This folder supplies two suitable adapters - the file *wamr-cheri.py* for testing interpreter mode and *wamr-cheri-aot.py* for testing AOT mode; instructions on how to use them are provided below.
+This folder supplies three suitable adapters - the file *wamr-cheri.py* is for testing interpreter mode and *wamr-cheri-aot.py* for testing AOT mode; instructions on how to use them are provided below.
 
-Additionally, a set of WASM test cases is provided as two WASI Test Suite test sets.  These have been designed to be run alongside the set distributed with WASI Test Suite itself.
+In addition, the file *wamr-cheri-compart.py* is an adapter specifically for the experimental *linux-cheri-purecap-capmgr* version of WAMR, which features a capability manager and compartmentalised WAMR.  This adapter supports passing the *--wamr-lib* argument needed by the capability manager flavour of *iwasm* in order to specify the WAMR *libiwasm.so* to load.
+
+A set of WASM test cases is provided as two WASI Test Suite test sets.  These have been designed to be run alongside the set distributed with WASI Test Suite itself.
 Please refer to instructions in [this folder](tests) to use those.
 
 ## How the Adapters Work
@@ -24,6 +26,8 @@ The wamr-cheri-aot.py works in the same way, however that has an additional step
 Note that due to all the file copying, running remotely is somewhat slow with each test taking several seconds to execute (for WASM) and typically up to 30s longer for AOT.  Note that the AOT time is dependent on the time to compile WASM to AOT; for large WASM files this can easily be 30s or more.
 
 Due to the number of files and tests this is not significant - it was considered to use e.g rsync but this is not available on windows, and other mechanisms would lead to higher complexity.
+
+The wamr-cheri-compart.py is identical to wamr-cheri.py apart from the addition of being able to use a "libiwasm" configuration setting, this should be set to the full pathname of the libiwasm.so containing all compartmentalised WAMR code in a dynamic shared object library.  It is used to pass the argument *--wamr-lib=<so_file>* to the *iwasm* runtime.
 
 ### Configuration Data
 The wasi-testsuite adapter file does not have access to the command-line because it is used internally from the main wasi-testsuite test runner program, however for the remote execution a number of parameters are required.
@@ -76,6 +80,7 @@ There are also some templates for testing different modes; these can be used for
 - *wamr_hybrid_adapter_settings.json* : Shows wamrc arguments to build an AOT suitable for Morello hybrid-cap
 - *wamr_hybrid_network_adapter_settings.json* : As above, but includes settings to provide additional networking arguments to `iwasm`
 - *wamr_purecap_network_adapter_settings.json* : wamrc arguments to build an AOT for Morello pure-cap, also with the networking support
+- *wamr_purecap_capmgr_compart_network_adapter_settings.json* : Template which can be used for the experimental capability manager / compartment version of WAMR, with networking support.  This does not yet support AOT mode.
 - *wamr_x86_64_adapter_settings.json* : Shows running a wamrc remotely on a Linux x86_64 machine, and executing iwasm on the same machine
 - *wamr_x86_64_network_adapter_settings.json* : As above, but with the additional networking arguments
 
@@ -90,6 +95,9 @@ The following keys are mandatory for both the *wamr-cheri.py* and the *wamr-cher
 Additional optional keys can be provided for networking support:
 - **addrpool**: Value of the *--addr-pool=<value>* WAMR argument; forces *--addr-pool* to be added to all `iwasm` executions
 - **allowres**: Value of the *--allow-resolve=<value>* WAMR argument; forces *--allow-resolve* to be added to all `iwasm` executions
+
+And for the experiemntal capability manager / compartment version of WAMR, the following optional argument is valid (only applies for the *wamr-cheri-compart.py* adapter):
+- **libiwasm**: Absolute pathname of the *libiwasm.so* built with all WAMR compartment code in; this is passed to *iwasm* via the --wamr-lib argument
 
 When using the `wamr-cheri-aot.py` adapter, an additional mandatory argument is needed to provide the full path of the WAMR compiler.  This is ignored if using the non-AOT adapter:
 - **wamrc**: Absolute pathname of WAMR compiler *wamrc* program on the local or remote machine
@@ -159,10 +167,9 @@ The three skipped tests are:
 
 A Verifoxx JIRA ticket has been raised to cover explanation of why these are skipped.
 
-## Experimental CHERI-WAMR Compartmentalisation Testing
-The *linux-cheri-purecap-capmgr* product build generates the experimental iwasm capability manager and WAMR as libiwasm, a dynamic shared object library.
-This application can be tested with the WASI-TestSuite for CHERI Morello using the same methods as described above, but please note the following:
+### Experimental CHERI-WAMR Compartmentalisation Testing Results
+Results for the *linux-cheri-purecap-capmgr* product build are identical to the standard product port, *linux-cheri-purecap*.
 
-1. The WASI Test Suite program does not support passing the new *--wamr-lib=<.so>* option, therefore ensure you place the *libiwasm.so* in the same folder as *iwasm* so it can be found using the default search path.
-2. AOT is not currently supported on this experimental product version, therefore use the *wamr-cheri.py* adapter and not *wamr-cheri-aot.py*.
-3. It is possible some tests may fail on the experimental platform as it is still a work in progress.
+Note that:
+1. To pass the new *--wamr-lib=<.so>* option the *wamr-cheri-compart.py* adapter was used, and a JSON configuration containing the key *libiwasm* was provided.
+2. AOT is not currently supported on this experimental product version, therefore the adapter and JSON config make no provisions for AOT.

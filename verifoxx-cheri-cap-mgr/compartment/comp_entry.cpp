@@ -297,7 +297,19 @@ extern "C" void CompartmentUnwrap(void* comp_data_object)
     // Create the service call proxy
     g_service_call_proxy = std::make_unique<CServiceCallProxy>(comp_fn_data);
 
-    LOG_VERBOSE("Call WAMR function in compartment");
+    LOG_VERBOSE("Dump capabilities from capability manager:\n"
+        "\t\tCapMgr return FP=%#p\n"
+        "\t\tWAMR Fn to call FP=%#p\n"
+        "\t\tService Callback Entry FP=%#p\n"
+        "\t\tService Callback Handler FP=%#p\n"
+        "\t\tService Callback FP LUT=%#p\n"
+        "\t\tSealer Capability=%#p",
+        comp_fn_data->comp_exit_fp,
+        comp_fn_data->fp,
+        comp_fn_data->service_callback_entry_fp,
+        comp_fn_data->capmgr_service_fp,
+        (void*)comp_fn_data->service_func_table,
+        comp_fn_data->sealer_cap);
 
     // Get compartment data to call implementation specific function
     uintptr_t retval = CallFunction(comp_fn_data);

@@ -59,8 +59,18 @@ public:
         // Seal the underlying ptr to the argument data using the sealer passed from CCompartmentData
         void* sealed = cheri_seal(service_fn_data.get(), m_compartment_data->sealer_cap);
 
-        // Call into the capability manager
+        LOG_VERBOSE("Dump capabilities for capability manager:\n"
+            "\t\tService Callback Entry FP=%#p\n"
+            "\t\tService Callback Handler FP=%#p\n"
+            "\t\tService Callback Actual function=[\"%s\" -> %#p]\n"
+            "\t\tSealer Capability=%#p",
+            m_compartment_data->service_callback_entry_fp,
+            m_compartment_data->capmgr_service_fp,
+            service_fn_name.c_str(),
+            service_fn_data->fp,
+            m_compartment_data->sealer_cap);
 
+        // Call into the capability manager
         LOG_DEBUG("<-- COMPARTMENT EXIT TO CAPMGR SERVICE <--");
         auto ret = CompartmentCaller(
             m_compartment_data->service_callback_entry_fp,   /* CapMgr entry function in Asm */
