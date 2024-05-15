@@ -259,6 +259,8 @@ extern "C" int32_t put_externref(wasm_exec_env_t exec_env, uintptr_t extref)
     std::cout << "       --> Capability Tag: " << cheri_tag_get(p) << std::endl;
 
     p = (uint32_t*)cheri_unseal(p, get_sealer());
+    auto array = reinterpret_cast<uint32_t*>(cheri_unseal(p, get_sealer()));
+
     std::cout << "    native UNSEALING CAPABILITY" << std::endl;
 
     if (!cheri_tag_get(p))
