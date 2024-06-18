@@ -322,7 +322,7 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
 #ifdef __CHERI__
     // Use the CHERI linear memory allocator
     if (memory_data_size > 0
-        && !(memory->memory_data = cheri_wasm_linear_memory_alloc(memory_data_size)))
+        && !(memory->memory_data = CHERI_CAP_TO_PTR(cheri_wasm_linear_memory_alloc(memory_data_size))))
     {
         set_error_buf(error_buf, error_buf_size, "CHERI allocate linear memory failed");
         goto fail1;
@@ -2551,7 +2551,7 @@ wasm_dump_perf_profiling(const WASMModuleInstance *module_inst)
                       i, module_inst->e->functions[i].total_exec_time / 1000.0f,
                       module_inst->e->functions[i].total_exec_cnt);
 
-#ifdef WASM_ENABLE_CHERI_PERF_PROFILING != 0
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
         os_printf(", time in native functions: %.3f ms", module_inst->e->functions[i].total_native_exec_time / 1000.0f);
 #endif
         os_printf("\n");

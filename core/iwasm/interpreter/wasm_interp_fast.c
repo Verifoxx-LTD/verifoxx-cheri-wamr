@@ -905,7 +905,7 @@ word_copy(uint32 *dest, uint32 *src, unsigned num)
 static inline WASMInterpFrame *
 ALLOC_FRAME(WASMExecEnv *exec_env, uint32 size, WASMInterpFrame *prev_frame)
 {
-    WASMInterpFrame *frame = wasm_exec_env_alloc_wasm_frame(exec_env, size);
+    WASMInterpFrame* frame = CHERI_CAP_TO_PTR(wasm_exec_env_alloc_wasm_frame(exec_env, size));
 
     if (frame) {
         frame->prev_frame = prev_frame;
@@ -931,7 +931,7 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
         frame->function->total_exec_cnt++;
     }
 #endif
-    wasm_exec_env_free_wasm_frame(exec_env, frame);
+    wasm_exec_env_free_wasm_frame(exec_env, CHERI_PTR_TO_CAP(frame));
 }
 
 static void
@@ -3811,7 +3811,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
         if ((uint8 *)(outs_area->lp + cur_func->param_cell_num)
 #ifdef __CHERI__
-            > exec_env->wasm_stack_p->top_boundary) {
+            > CHERI_CAP_TO_PTR(exec_env->wasm_stack_p->top_boundary)) {
 #else
             > exec_env->wasm_stack.s.top_boundary) {
 #endif

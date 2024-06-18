@@ -842,7 +842,7 @@ word_copy(uint32 *dest, uint32 *src, unsigned num)
 static inline WASMInterpFrame *
 ALLOC_FRAME(WASMExecEnv *exec_env, uint32 size, WASMInterpFrame *prev_frame)
 {
-    WASMInterpFrame *frame = wasm_exec_env_alloc_wasm_frame(exec_env, size);
+    WASMInterpFrame *frame = CHERI_CAP_TO_PTR(wasm_exec_env_alloc_wasm_frame(exec_env, size));
 
     if (frame) {
         frame->prev_frame = prev_frame;

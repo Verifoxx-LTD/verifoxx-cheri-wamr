@@ -42,6 +42,10 @@ endif ()
 
 set (TOOLCHAIN_PREFIX "aarch64-${CHERI_BUILD_HOST_TARGET}-linux-gnu")
 
+if (CHERI_USE_LLVM_TOOLCHAIN)
+    message (FATAL, "Sorry, but native library cannot yet be built with LLVM.  Please use GCC")
+endif ()
+
 # Set the GNU toolchain builders
 
 if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)

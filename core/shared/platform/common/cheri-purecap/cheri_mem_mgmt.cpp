@@ -14,7 +14,7 @@
 #include <iostream>
 #include <cstring>
 
-static CheriMemMgr* mem_mgr = nullptr;
+static CheriMemMgr *mem_mgr = nullptr;
 static int32_t max_native_heap_used = 0;
 static int32_t curr_native_heap_used = 0;
 static int32_t alloc_count = 0;
@@ -51,19 +51,19 @@ extern "C" void delete_cheri_mem_mgr()
 // Future need at the moment
 bool cheri_wasm_set_check_heap_metrics(uint32_t heap_size, uint32_t heap_offset)
 {
-    return (mem_mgr) ? mem_mgr->set_heap_metrics(heap_size, heap_offset) : NULL;
+    return (mem_mgr) ? mem_mgr->set_heap_metrics(heap_size, heap_offset) : false;
 }
 
 // Allocate a linear memory  (C Api)
 extern "C" void* __capability cheri_wasm_linear_memory_alloc(size_t size)
 {
-    return (mem_mgr) ? mem_mgr->alloc_linear_memory(size) : NULL;
+    return (mem_mgr) ? mem_mgr->alloc_linear_memory(size) : (void *__capability)NULL;
 }
 
 // Create / get the stack struct  (C Api)
 extern "C" WASMCheriStack_t * __capability cheri_wasm_create_stack_struct()
 {
-    return (mem_mgr) ? mem_mgr->create_stack_struct() : NULL;
+    return (mem_mgr) ? mem_mgr->create_stack_struct() : (WASMCheriStack_t * __capability)NULL;
 }
 
 // Update the stack size with supplied value and return aligned value
@@ -160,7 +160,7 @@ void* __capability CheriMemMgr::cheri_realloc(void* __capability ptr, size_t sz_
 
      if (ptr)
      {
-         std::memset(ptr, 0, sz);
+         std::memset(CHERI_CAP_TO_PTR(ptr), 0, sz);
      }
      return ptr;
 #endif
@@ -237,7 +237,7 @@ void CheriMemMgr::cleanup_wasm_stack()
 #if ENABLE_CHERI_PURECAP
         cheri_free_wrapper(m_stack_struct);
 #else
-        delete m_stack_struct;
+        delete (WASMCheriStack_t*)CHERI_CAP_TO_PTR(m_stack_struct);
 #endif
         m_stack_struct = nullptr;
     }
@@ -253,7 +253,7 @@ void CheriMemMgr::cleanup_wasm_stack()
 #if ENABLE_CHERI_PURECAP
         cheri_free_stack_wrapper(m_stack);
 #else
-        delete[] m_stack;
+        delete[] (uint8_t*)CHERI_CAP_TO_PTR(m_stack);
 #endif
         m_stack = nullptr;
     }
