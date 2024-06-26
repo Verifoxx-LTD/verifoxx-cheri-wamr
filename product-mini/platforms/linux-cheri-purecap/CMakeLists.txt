@@ -63,21 +63,6 @@ if (CHERI_USE_LLVM_TOOLCHAIN)
         set (CMAKE_CXX_COMPILER "${CHERI_LLVM_TOOLCHAIN_DIR}/bin/clang++")
     endif ()
 
-    # Add support for LDSO which are not normally available in static MUSL
-    # This is for linking a static library for dynlink functionality only
-    if (DEFINED CHERI_MUSL_SOURCE_ROOT)
-        set (MUSL_INTERNAL_INCLUDE_PATHS "${CHERI_MUSL_SOURCE_ROOT}/ldso"
-            "${CHERI_MUSL_SOURCE_ROOT}/src/internal"
-            "${CHERI_MUSL_SOURCE_ROOT}/arch/generic"
-            "${CHERI_MUSL_SOURCE_ROOT}/arch/morello"
-            "${CHERI_MUSL_SOURCE_ROOT}/src/include"
-            "${CHERI_MUSL_SOURCE_ROOT}/src/include/sys"
-            "${CHERI_MUSL_SOURCE_ROOT}/obj/include"
-            "${CHERI_MUSL_SOURCE_ROOT}/obj/src/internal"
-            "${CHERI_MUSL_SOURCE_ROOT}/include"
-        )
-    endif ()
-
     # Build flags - purecap or not	
     if (CHERI_PURECAP)
         message(STATUS "CHERI pure-cap mode enabled")
@@ -85,14 +70,16 @@ if (CHERI_USE_LLVM_TOOLCHAIN)
         set (CHERI_ARCH_ABI "${CHERI_ARCH_ABI} --target=aarch64-unknown-linux-musl_purecap")
 
         # Link options
-        set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections" "-nostdlib" "-L${CHERI_MUSL_TOOLCHAIN_DIR}/lib"
-                "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crt1.o"
-                "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crti.o"
-                "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crtn.o"
-                "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtbegin.o"
-                "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtend.o"
-                "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/libclang_rt.builtins.a"
-                )
+        set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections")
+
+        #set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections" "-nostdlib" "-L${CHERI_MUSL_TOOLCHAIN_DIR}/lib"
+        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crt1.o"
+        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crti.o"
+        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crtn.o"
+        #        "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtbegin.o"
+         #       "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtend.o"
+         #       "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/libclang_rt.builtins.a"
+         #       )
 
     else ()
         message(STATUS "CHERI hybrid capability mode enabled")

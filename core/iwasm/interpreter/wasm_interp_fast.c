@@ -16,6 +16,7 @@
 
 #ifdef __CHERI__
 #include <cheriintrin.h>
+#include <sys/auxv.h>
 #endif
 
 typedef int32 CellType_I32;
@@ -1225,8 +1226,11 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     register uint32 *frame_lp = NULL;          /* cache of frame->lp */
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0
-    /* cache of label base addr */
+    /* cache of label base addr - this is sentry on purecap, so need to unseal it to use as base */
     register uint8 *label_base = &&HANDLE_WASM_OP_UNREACHABLE;
+#if defined(__CHERI__) && ENABLE_CHERI_PURECAP
+    label_base = cheri_unseal(label_base, cheri_offset_set(getauxptr(AT_CHERI_SEAL_CAP), CHERI_OTYPE_SENTRY));
+#endif
 #endif
 #endif
     uint8 *frame_ip_end = frame_ip + 1;
