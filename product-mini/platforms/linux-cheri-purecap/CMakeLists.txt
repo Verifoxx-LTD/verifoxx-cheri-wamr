@@ -71,16 +71,6 @@ if (CHERI_USE_LLVM_TOOLCHAIN)
 
         # Link options
         set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections")
-
-        #set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections" "-nostdlib" "-L${CHERI_MUSL_TOOLCHAIN_DIR}/lib"
-        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crt1.o"
-        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crti.o"
-        #        "${CHERI_MUSL_TOOLCHAIN_DIR}/lib/crtn.o"
-        #        "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtbegin.o"
-         #       "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/clang_rt.crtend.o"
-         #       "${CHERI_LLVM_TOOLCHAIN_DIR}/lib/clang/13.0.0/lib/aarch64-unknown-linux-musl_purecap/libclang_rt.builtins.a"
-         #       )
-
     else ()
         message(STATUS "CHERI hybrid capability mode enabled")
         set (CHERI_ARCH_ABI "-march=morello --target=aarch64-unknown-linux-gnu")
