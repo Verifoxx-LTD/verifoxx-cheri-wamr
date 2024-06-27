@@ -624,6 +624,10 @@ struct WASMModule {
        functions in that group */
     uint32 fast_jit_ready_groups;
 #endif
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_load_time;           /* Time taken to load module */
+#endif
 };
 
 typedef struct BlockType {

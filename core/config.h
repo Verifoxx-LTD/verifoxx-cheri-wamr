@@ -234,7 +234,7 @@
 
 /* WASM Interpreter labels-as-values feature */
 #ifndef WASM_ENABLE_LABELS_AS_VALUES
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__) /* Kind of pointless, since clang defines __GNUC__ but makes it explicit */
 #define WASM_ENABLE_LABELS_AS_VALUES 1
 #else
 #define WASM_ENABLE_LABELS_AS_VALUES 0
@@ -296,6 +296,9 @@
 /* Performance profiling */
 #ifndef WASM_ENABLE_PERF_PROFILING
 #define WASM_ENABLE_PERF_PROFILING 0
+#endif
+#ifndef WASM_ENABLE_CHERI_PERF_PROFILING
+#define WASM_ENABLE_CHERI_PERF_PROFILING 0
 #endif
 
 /* Dump call stack */

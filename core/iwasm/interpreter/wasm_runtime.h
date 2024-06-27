@@ -224,6 +224,12 @@ struct WASMFunctionInstance {
     uint64 total_exec_time;
     /* total execution count */
     uint32 total_exec_cnt;
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    // Additional CHERI fields
+    /* Total time spent calling system or native function */
+    uint64 total_native_exec_time;
+#endif
 #endif
 };
 
@@ -284,6 +290,10 @@ typedef struct WASMModuleInstanceExtra {
     uint32 max_aux_stack_used;
 #endif
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_load_and_instantiate_time;   /* Time to load and instantiate module */
+#endif
+
 #if WASM_ENABLE_DEBUG_INTERP != 0                         \
     || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
         && WASM_ENABLE_LAZY_JIT != 0)
@@ -303,6 +313,7 @@ struct WASMModuleInstance {
        for module instance loaded from AOT file, this field is
        Wasm_Module_AoT, and this structure should be treated as
        AOTModuleInstance structure. */
+
     uint32 module_type;
 
     uint32 memory_count;

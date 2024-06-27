@@ -34,7 +34,7 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
 
 #ifdef __CHERI__
     WASMExecEnv* exec_env;
-    WASMCheriStack_t* cheri_stack;
+    WASMCheriStack_t* __capability cheri_stack;
 
     // Update stack size: allow for CHERI alignment
     stack_size = cheri_wasm_update_stack_size(stack_size);

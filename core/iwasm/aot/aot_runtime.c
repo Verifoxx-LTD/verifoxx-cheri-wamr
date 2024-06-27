@@ -1228,7 +1228,7 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
     // Align up the global data start, made space for it previously
     p = cheri_align_up(p, __BIGGEST_ALIGNMENT__);
 #elif AOT_CHERI_PTR_SIZE
-    p = (uint8*)cheri_align_up(p, (uint8*)AOT_CHERI_PTR_SIZE);
+    p = (uint8*)cheri_align_up(p, AOT_CHERI_PTR_SIZE);
 #endif
     module_inst->global_data = p;
     module_inst->global_data_size = module->global_data_size;
@@ -1242,7 +1242,7 @@ aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
     // Align up the position of the tables, made space for it previously
     p = cheri_align_up(p, __BIGGEST_ALIGNMENT__);
 #elif AOT_CHERI_PTR_SIZE
-    p = (uint8*)cheri_align_up(p, (uint8*)AOT_CHERI_PTR_SIZE);
+    p = (uint8*)cheri_align_up(p, AOT_CHERI_PTR_SIZE);
 #endif
     module_inst->table_count = module->table_count + module->import_table_count;
     if (!tables_instantiate(module_inst, module, (AOTTableInstance *)p,

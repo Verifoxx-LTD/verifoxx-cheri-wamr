@@ -322,7 +322,7 @@ memory_instantiate(WASMModuleInstance *module_inst, WASMMemoryInstance *memory,
 #ifdef __CHERI__
     // Use the CHERI linear memory allocator
     if (memory_data_size > 0
-        && !(memory->memory_data = cheri_wasm_linear_memory_alloc(memory_data_size)))
+        && !(memory->memory_data = CHERI_CAP_TO_PTR(cheri_wasm_linear_memory_alloc(memory_data_size))))
     {
         set_error_buf(error_buf, error_buf_size, "CHERI allocate linear memory failed");
         goto fail1;
@@ -1692,6 +1692,10 @@ wasm_instantiate(WASMModule *module, bool is_sub_inst,
     if (!module)
         return NULL;
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_instantiate_start_time = os_time_get_boot_microsecond();
+#endif
+
     /* Check the heap size */
     heap_size = align_uint(heap_size, 8);
     if (heap_size > APP_HEAP_SIZE_MAX)
@@ -2195,6 +2199,12 @@ wasm_instantiate(WASMModule *module, bool is_sub_inst,
         (WASMModuleInstanceCommon *)module_inst);
 #endif
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    // Include module load time here
+    module_inst->e->perf_module_load_and_instantiate_time = module->perf_module_load_time +
+        (os_time_get_boot_microsecond() - perf_module_instantiate_start_time);
+#endif
+
     (void)global_data_end;
     return module_inst;
 
@@ -2502,6 +2512,12 @@ wasm_dump_perf_profiling(const WASMModuleInstance *module_inst)
     uint32 i, j;
 
     os_printf("Performance profiler data:\n");
+    
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    os_printf("  module load and instantiate time: %.3f ms\n",
+        module_inst->e->perf_module_load_and_instantiate_time / 1000.0f);
+#endif
+
     for (i = 0; i < module_inst->e->function_count; i++) {
         func_inst = module_inst->e->functions + i;
         if (func_inst->is_import_func) {
@@ -2525,15 +2541,20 @@ wasm_dump_perf_profiling(const WASMModuleInstance *module_inst)
 
         if (func_name)
             os_printf("  func %s, execution time: %.3f ms, execution count: %d "
-                      "times\n",
+                      "times",
                       func_name,
                       module_inst->e->functions[i].total_exec_time / 1000.0f,
                       module_inst->e->functions[i].total_exec_cnt);
         else
             os_printf("  func %d, execution time: %.3f ms, execution count: %d "
-                      "times\n",
+                      "times",
                       i, module_inst->e->functions[i].total_exec_time / 1000.0f,
                       module_inst->e->functions[i].total_exec_cnt);
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+        os_printf(", time in native functions: %.3f ms", module_inst->e->functions[i].total_native_exec_time / 1000.0f);
+#endif
+        os_printf("\n");
     }
 }
 #endif

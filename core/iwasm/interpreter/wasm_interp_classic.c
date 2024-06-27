@@ -842,7 +842,7 @@ word_copy(uint32 *dest, uint32 *src, unsigned num)
 static inline WASMInterpFrame *
 ALLOC_FRAME(WASMExecEnv *exec_env, uint32 size, WASMInterpFrame *prev_frame)
 {
-    WASMInterpFrame *frame = wasm_exec_env_alloc_wasm_frame(exec_env, size);
+    WASMInterpFrame *frame = CHERI_CAP_TO_PTR(wasm_exec_env_alloc_wasm_frame(exec_env, size));
 
     if (frame) {
         frame->prev_frame = prev_frame;
@@ -925,6 +925,12 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
         return;
     }
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    /* Measure time spent in native function */
+    uint64 native_func_time_start = os_time_get_boot_microsecond();
+#endif
+
+
     if (func_import->call_conv_wasm_c_api) {
         ret = wasm_runtime_invoke_c_api_native(
             (WASMModuleInstanceCommon *)module_inst, native_func_pointer,
@@ -947,6 +953,12 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
             func_import->signature, func_import->attachment, frame->lp,
             cur_func->param_cell_num, argv_ret);
     }
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    /* Measure time spent in native function */
+    cur_func->total_native_exec_time +=
+        os_time_get_boot_microsecond() - native_func_time_start;
+#endif
 
     if (!ret)
         return;

@@ -13,6 +13,23 @@
 
 #ifdef __CHERI__
 #include <cheriintrin.h>
+
+ // Helper macro for capability to pointer conversion on hybrid
+#if !defined(__CHERI_PURE_CAPABILITY__)
+#define CHERI_CAP_TO_PTR(p) (((void*)cheri_address_get((void * __capability)(p))))
+#else
+#define CHERI_CAP_TO_PTR(p) (p)
+#endif
+
+ // Helper macro for pointer to capability conversion on hybrid
+#if !defined(__CHERI_PURE_CAPABILITY__) && defined(__clang__)
+#define CHERI_PTR_TO_CAP(p) ((void * __capability)((void *)(p)))
+#elif !defined(__CHERI_PURE_CAPABILITY__) && defined(__GNUC__)
+#define CHERI_PTR_TO_CAP(p) ((void * __capability)((void *)(p)))
+#else
+#define CHERI_PTR_TO_CAP(p) (p)
+#endif
+
 #endif
 
 #ifdef __cplusplus
@@ -360,7 +377,7 @@ static inline void *
 wasm_exec_env_wasm_stack_top(WASMExecEnv *exec_env)
 {
 #ifdef __CHERI__
-    return (void*)exec_env->wasm_stack_p->top;
+    return CHERI_CAP_TO_PTR(exec_env->wasm_stack_p->top);
 #else
     return exec_env->wasm_stack.s.top;
 #endif

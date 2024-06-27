@@ -30,65 +30,125 @@ if (NOT DEFINED CHERI_STATIC_BUILD)
     set (CHERI_STATIC_BUILD 1)
 endif ()
 
+# Default for purecap library rpath folder
+if (NOT DEFINED MORELLO_PURECAP_LIBS_FOLDER)
+    set(MORELLO_PURECAP_LIBS_FOLDER "/purecap-lib")
+endif ()
+
 set (WAMR_BUILD_TARGET AARCH64)
 
-# If a toolchain file has not been used, try and figure out the toolchain based on
-# CHERI_GNU_TOOLCHAIN_DIR and the machine architecture
+if (CHERI_USE_LLVM_TOOLCHAIN)
+    message(STATUS "*** LLVM TOOLCHAIN SELECTED ***")
 
-# Figure out the toolchain prefix depending on whether we are on an aarch64 host or not
-# If not we are doing cross-compilation, if so we are on the target
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)")
-    message(STATUS "Target compilation detected")
-	set (CHERI_BUILD_HOST_TARGET "aarch64")
-else ()
-    set (CHERI_BUILD_HOST_TARGET "none")
-	message(STATUS "Cross-compilation detected")
-endif ()
+    # Set the LLVM toolchain builders
+    if (NOT DEFINED CHERI_LLVM_TOOLCHAIN_DIR)
+        set (CHERI_LLVM_TOOLCHAIN_DIR "")		# Assume would be on path
+    else ()
+        set (CMAKE_FIND_ROOT_PATH "${CHERI_LLVM_TOOLCHAIN_DIR}")
+        set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+        set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+        set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
-set (TOOLCHAIN_PREFIX "aarch64-${CHERI_BUILD_HOST_TARGET}-linux-gnu")
-
-# Set the GNU toolchain builders
-
-if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)
-    set (CHERI_GNU_TOOLCHAIN_DIR "")		# Assume would be on path
-else ()
-    # Search paths
-    set (CMAKE_FIND_ROOT_PATH "${CHERI_GNU_TOOLCHAIN_DIR}")
-    set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-    set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-    set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-
-    message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
-    message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
-
-    if (NOT DEFINED CMAKE_SYS_ROOT)
-        set(CMAKE_SYS_ROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
-        message(STATUS "CMAKE_SYS_ROOT=${CHERI_GNU_TOOLCHAIN_DIR}")
+        message(STATUS "Toolchain binaries=${CHERI_LLVM_TOOLCHAIN_DIR}/bin/clang")
+        message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
     endif ()
-endif ()
 
-if (NOT DEFINED CMAKE_C_COMPILER)
-    set (CMAKE_C_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-gcc")
-endif ()
+    if (NOT DEFINED CHERI_MUSL_TOOLCHAIN_DIR)
+        message(STATUS "CHERI_MUSL_TOOLCHAIN_DIR not being set therefore no bespoke SYSROOT being used")
+    elseif (NOT DEFINED CMAKE_SYSROOT)
+        set (CMAKE_SYSROOT ${CHERI_MUSL_TOOLCHAIN_DIR})
+        message(STATUS "SYSROOT set to ${CMAKE_SYSROOT}")
+    endif ()
 
-if (NOT_DEFINED_CMAKE_CXX_COMPLIER)
-    set (CMAKE_CXX_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-g++")
-endif ()
+    if (NOT DEFINED CMAKE_C_COMPILER)
+        set (CMAKE_C_COMPILER "${CHERI_LLVM_TOOLCHAIN_DIR}/bin/clang")
+    endif ()
 
+    if (NOT_DEFINED_CMAKE_CXX_COMPLIER)
+        set (CMAKE_CXX_COMPILER "${CHERI_LLVM_TOOLCHAIN_DIR}/bin/clang++")
+    endif ()
+
+    # Build flags - purecap or not	
+    if (CHERI_PURECAP)
+        message(STATUS "CHERI pure-cap mode enabled")
+        set (CHERI_ARCH_ABI "-march=morello+c64 -mabi=purecap")
+        set (CHERI_ARCH_ABI "${CHERI_ARCH_ABI} --target=aarch64-unknown-linux-musl_purecap")
+
+        # Link options
+        set (LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections")
+    else ()
+        message(STATUS "CHERI hybrid capability mode enabled")
+        set (CHERI_ARCH_ABI "-march=morello --target=aarch64-unknown-linux-gnu")
+        
+        # Link options
+        set (LINK_OPTIONS_SETTINGS "")
+    endif ()
+else ()
+    message(STATUS "*** Using GNU TOOLCHAIN ***")
+
+    # If a toolchain file has not been used, try and figure out the toolchain based on
+    # CHERI_GNU_TOOLCHAIN_DIR and the machine architecture
+
+    # Figure out the toolchain prefix depending on whether we are on an aarch64 host or not
+    # If not we are doing cross-compilation, if so we are on the target
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)")
+        message(STATUS "Target compilation detected")
+	    set (CHERI_BUILD_HOST_TARGET "aarch64")
+    else ()
+        set (CHERI_BUILD_HOST_TARGET "none")
+	    message(STATUS "Cross-compilation detected")
+    endif ()
+
+    set (TOOLCHAIN_PREFIX "aarch64-${CHERI_BUILD_HOST_TARGET}-linux-gnu")
+
+    # Set the GNU toolchain builders
+
+    if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)
+        set (CHERI_GNU_TOOLCHAIN_DIR "")		# Assume would be on path
+    else ()
+        # Search paths
+        set (CMAKE_FIND_ROOT_PATH "${CHERI_GNU_TOOLCHAIN_DIR}")
+        set (CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+        set (CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+        set (CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+
+        message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
+        message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
+
+        if (NOT DEFINED CMAKE_SYS_ROOT)
+            set(CMAKE_SYS_ROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
+            message(STATUS "CMAKE_SYS_ROOT=${CHERI_GNU_TOOLCHAIN_DIR}")
+        endif ()
+    endif ()
+
+    if (NOT DEFINED CMAKE_C_COMPILER)
+        set (CMAKE_C_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-gcc")
+    endif ()
+
+    if (NOT_DEFINED_CMAKE_CXX_COMPLIER)
+        set (CMAKE_CXX_COMPILER "${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-g++")
+    endif ()
+
+    # Build flags - purecap or not	
+    if (CHERI_PURECAP)
+        message(STATUS "CHERI pure-cap mode enabled")
+        set (CHERI_ARCH_ABI "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")
+        set(LINK_OPTIONS_SETTINGS "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}" "-Wl,--gc-sections")
+    else ()
+        message(STATUS "CHERI hybrid capability mode enabled")
+        set (CHERI_ARCH_ABI "${CHERI_COMPILER_FLAGS} -march=morello")
+        set(LINK_OPTIONS_SETTINGS "")
+    endif ()
+
+endif()
+
+# Link options
+set (LINK_OPTIONS_SETTINGS ${LINK_OPTIONS_SETTINGS} -Wl,-Map=iwasm.map)
 
 if (NOT DEFINED CHERI_COMPILER_FLAGS)
     set (CHERI_COMPILER_FLAGS "")
 else ()
     message(STATUS "Initial compiler flags passed in: ${CHERI_COMPILER_FLAGS}")
-endif ()
-
-# Set Build flags for the targetted architecture
-if (CHERI_PURECAP)
-    message(STATUS "CHERI pure-cap mode enabled")
-    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello+c64 -mabi=purecap")
-else ()
-    message(STATUS "CHERI hybrid capability mode enabled")
-    set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -march=morello")
 endif ()
 
 if (CHERI_STATIC_BUILD)
@@ -99,8 +159,8 @@ else ()
     set (CHERI_STATIC_LINK_FINAL "")
 endif ()
 
-# Final common compiler flags adds options to save build files and set the __FILE__ mapping folder
-set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} -save-temps -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
+# Final common compiler flags adds option to set the __FILE__ mapping folder
+set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} ${CHERI_ARCH_ABI} -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_COMPILER_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CHERI_COMPILER_FLAGS}")
@@ -204,6 +264,11 @@ if (NOT DEFINED WAMR_BUILD_DEBUG_PREPROCESSOR)
   set (WAMR_BUILD_DEBUG_PREPROCESSOR 0)
 endif ()
 
+if (DEFINED WAMR_BUILD_PERF_PROFILING)
+  # Set the CHERI perf profiling extension for this build target
+  set (WAMR_BUILD_CHERI_PERF_PROFILING ${WAMR_BUILD_PERF_PROFILING})
+endif ()
+
 if (WAMR_BUILD_DEBUG_INTERP EQUAL 1)
   set (WAMR_BUILD_FAST_INTERP 0)
   set (WAMR_BUILD_MINI_LOADER 0)
@@ -215,10 +280,15 @@ set (WAMR_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 include (${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake)
 add_library(vmlib ${WAMR_RUNTIME_LIB_SOURCE})
 
-set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
-
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wformat -Wformat-security -Wshadow")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wformat -Wformat-security -Wno-unused")
+
+if ( CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(STATUS "Stripping debug symbols")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,--strip-debug")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--strip-debug")
+endif ()
+
 
 # The following flags are to enhance security, but it may impact performance,
 # we disable them by default.
@@ -235,10 +305,13 @@ add_executable (iwasm main.c ${UNCOMMON_SHARED_SOURCE})
 check_pie_supported()
 set_target_properties (iwasm PROPERTIES POSITION_INDEPENDENT_CODE ON LINKER_LANGUAGE CXX)
 
-target_link_options(iwasm PUBLIC "SHELL:-Xlinker -Map" "SHELL:-Xlinker iwasm.map")
+target_link_options(iwasm PUBLIC ${LINK_OPTIONS_SETTINGS})
 
-
-target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lm -ldl -lpthread ${CHERI_STATIC_LINK_FINAL})
+if (CHERI_USE_LLVM_TOOLCHAIN)
+    target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -lc++ -lc++abi -lunwind -lm -ldl -lpthread -lc ${CHERI_STATIC_LINK_FINAL})
+else ()
+    target_link_libraries (iwasm vmlib ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -static-libstdc++ -static-libgcc -lm -ldl -lpthread ${CHERI_STATIC_LINK_FINAL})
+endif ()
 
 add_library (libiwasm SHARED ${WAMR_RUNTIME_LIB_SOURCE})
 
@@ -253,9 +326,11 @@ if (WAMR_BUILD_FAST_INTERP AND CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 
-# NOTE: Currently CHERI Morello apps should be built statically as native libs are hybrid (not purecap)
-# We cannot do that for a shared library, but build as much as possible statically and provide libc in a specific folder so there
-# is no interaction with the installed one.
+# NOTE: Morello shared libraries will be built for hybrid
+# For building the libiwasm shared object, build as much as possible statically and for purecap provide the RPATH so it can find needed runtime dependencies
+if (CHERI_PURECAP)
+    target_link_options(libiwasm PUBLIC "-Wl,-rpath,${MORELLO_PURECAP_LIBS_FOLDER}")
+endif()
 target_link_libraries (libiwasm ${LLVM_AVAILABLE_LIBS} ${UV_A_LIBS} -static-libstdc++ -static-libgcc -Wl,-Bstatic,-lm -Wl,-Bstatic,-ldl -Wl,-Bstatic,-lpthread -Wl,-Bdynamic,-lc)
 
 install (TARGETS iwasm DESTINATION bin)

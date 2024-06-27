@@ -4237,6 +4237,10 @@ wasm_loader_load(uint8 *buf, uint32 size,
 #endif
                  char *error_buf, uint32 error_buf_size)
 {
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_load_start_time = os_time_get_boot_microsecond();
+#endif
+
     WASMModule *module = create_module(error_buf, error_buf_size);
     if (!module) {
         return NULL;
@@ -4260,6 +4264,10 @@ wasm_loader_load(uint8 *buf, uint32 size,
                                       error_buf, error_buf_size)) {
         goto fail;
     }
+#endif
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    module->perf_module_load_time = os_time_get_boot_microsecond() - perf_module_load_start_time;
 #endif
 
     LOG_VERBOSE("Load module success.\n");

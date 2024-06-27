@@ -16,6 +16,7 @@
 
 #ifdef __CHERI__
 #include <cheriintrin.h>
+#include <sys/auxv.h>
 #endif
 
 typedef int32 CellType_I32;
@@ -905,7 +906,7 @@ word_copy(uint32 *dest, uint32 *src, unsigned num)
 static inline WASMInterpFrame *
 ALLOC_FRAME(WASMExecEnv *exec_env, uint32 size, WASMInterpFrame *prev_frame)
 {
-    WASMInterpFrame *frame = wasm_exec_env_alloc_wasm_frame(exec_env, size);
+    WASMInterpFrame* frame = CHERI_CAP_TO_PTR(wasm_exec_env_alloc_wasm_frame(exec_env, size));
 
     if (frame) {
         frame->prev_frame = prev_frame;
@@ -931,7 +932,7 @@ FREE_FRAME(WASMExecEnv *exec_env, WASMInterpFrame *frame)
         frame->function->total_exec_cnt++;
     }
 #endif
-    wasm_exec_env_free_wasm_frame(exec_env, frame);
+    wasm_exec_env_free_wasm_frame(exec_env, CHERI_PTR_TO_CAP(frame));
 }
 
 static void
@@ -978,6 +979,11 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
         return;
     }
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    /* Measure time spent in native function */
+    uint64 native_func_time_start = os_time_get_boot_microsecond();
+#endif
+
     if (func_import->call_conv_wasm_c_api) {
         ret = wasm_runtime_invoke_c_api_native(
             (WASMModuleInstanceCommon *)module_inst, native_func_pointer,
@@ -1000,6 +1006,12 @@ wasm_interp_call_func_native(WASMModuleInstance *module_inst,
             func_import->signature, func_import->attachment, frame->lp,
             cur_func->param_cell_num, argv_ret);
     }
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    /* Measure time spent in native function */
+    cur_func->total_native_exec_time +=
+        os_time_get_boot_microsecond() - native_func_time_start;
+#endif
 
     if (!ret)
         return;
@@ -1214,8 +1226,11 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
     register uint32 *frame_lp = NULL;          /* cache of frame->lp */
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0
-    /* cache of label base addr */
+    /* cache of label base addr - this is sentry on purecap, so need to unseal it to use as base */
     register uint8 *label_base = &&HANDLE_WASM_OP_UNREACHABLE;
+#if defined(__CHERI__) && ENABLE_CHERI_PURECAP
+    label_base = cheri_unseal(label_base, cheri_offset_set(getauxptr(AT_CHERI_SEAL_CAP), CHERI_OTYPE_SENTRY));
+#endif
 #endif
 #endif
     uint8 *frame_ip_end = frame_ip + 1;
@@ -3800,7 +3815,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 
         if ((uint8 *)(outs_area->lp + cur_func->param_cell_num)
 #ifdef __CHERI__
-            > exec_env->wasm_stack_p->top_boundary) {
+            > CHERI_CAP_TO_PTR(exec_env->wasm_stack_p->top_boundary)) {
 #else
             > exec_env->wasm_stack.s.top_boundary) {
 #endif
