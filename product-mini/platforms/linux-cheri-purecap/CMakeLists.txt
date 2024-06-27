@@ -30,6 +30,11 @@ if (NOT DEFINED CHERI_STATIC_BUILD)
     set (CHERI_STATIC_BUILD 1)
 endif ()
 
+# Default for purecap library rpath folder
+if (NOT DEFINED MORELLO_PURECAP_LIBS_FOLDER)
+    set(MORELLO_PURECAP_LIBS_FOLDER "/purecap-lib")
+endif ()
+
 set (WAMR_BUILD_TARGET AARCH64)
 
 if (CHERI_USE_LLVM_TOOLCHAIN)
@@ -154,7 +159,7 @@ else ()
     set (CHERI_STATIC_LINK_FINAL "")
 endif ()
 
-# Final common compiler flags adds options to save build files and set the __FILE__ mapping folder
+# Final common compiler flags adds option to set the __FILE__ mapping folder
 set (CHERI_COMPILER_FLAGS "${CHERI_COMPILER_FLAGS} ${CHERI_ARCH_ABI} -ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CHERI_COMPILER_FLAGS}")
