@@ -69,11 +69,13 @@ class BmTest(LoggingMixin):
         self._log.debug(f'Creating BmTest[{test_name} : {test_wasm}]')
         # Set the callback function for this test
         self._runner.set_callback(None)
+        self._runner.profile_with_time(None)
         
     def run_test(self, do_aot=True, do_native=True):
         """ Run the test on the remote system. We do two runs, one for hybrid and one for purecap.  Returns a BmTestResult object. """
         results = BmTestResult()
         self._runner.set_callback(self.stdout_test_parser_fn)
+        self._runner.profile_with_time(self._get_time_profile_string())
 
         for tft, tt in results.get_test_pair(do_aot, do_native): 
             test_file = self._test_wasm
@@ -89,6 +91,9 @@ class BmTest(LoggingMixin):
 
     def stdout_test_parser_fn(self, stdout_string):
         raise NotImplementedError('Must subclass BmTestResult!')
+    
+    def _get_time_profile_string(self):
+        return None                     # Default is we never use time profiling
     
     def iwasm_exit_code(self):
         """ Get expected exit code from the iwasm program for this WASM """
@@ -152,3 +157,30 @@ class BmTestCoremark(BmTest):
                     pass
         return None
             
+class BmTestSightglass(BmTest):
+    """ BmTest instance for Sightglass tests. """
+    
+    SIGHTGLASS_PREFIX = '**--Wallclock Time:'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._log.debug('Created BmTestSightglass Instance')
+        
+    def stdout_test_parser_fn(self, stdout_string):
+        # Find line which is microseconds for one dhrystone
+        for line in stdout_string.splitlines():
+            if line.find(self.SIGHTGLASS_PREFIX) != -1:
+                try:
+                    return float(line.replace(self.SIGHTGLASS_PREFIX, '', 1).strip())
+                except ValueError:
+                    pass
+        return None
+
+    def _get_time_profile_string(self):
+        return f'{self.SIGHTGLASS_PREFIX} %e'   # Known prefix so can find it; %e outputs wallclock time in seconds
+
+    def iwasm_exit_code(self):
+        """ Get expected exit code for this WASM """
+        # In Sightglass case, it returns a calculation result so ignore the exit code
+        return None
+

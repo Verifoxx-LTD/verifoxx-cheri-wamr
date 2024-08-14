@@ -31,7 +31,8 @@ OPTIONAL_JSON_KEYS = [
              'wamrc_args_hybrid',       # Target args to use for wamrc for hybrid (as JSON list)
              'wamrc_host',      # Optional remote host if wamrc not run locally
              'allowres',   # String passed in allow-resolve argument
-             'addrpool'    # String passed in addr-pool argument
+             'addrpool',    # String passed in addr-pool argument
+             'time_command', # Whatever /usr/bin/time is on remote (default is /usr/bin/time)
              ]
 
 WAMRC_HOST_JSON_KEYS = [
@@ -54,6 +55,9 @@ class TestFileType(Enum):
 class BmTestRunner(LoggingMixin):
     """ Responsible for running test on remote.  Loads settings from JSON file. """
     
+    # The GNU time command on the remote host where iwasm is run - can be overriden in JSON
+    DEFAULT_TIME_COMMAND_REMOTE = r'/usr/bin/time'
+    
     def __init__(self, json_file, repeat_count=5):
         """ Given: JSON file name to load
                     callback which can parse stdout from an iwasm test and return an integer which is # seconds taken
@@ -72,6 +76,7 @@ class BmTestRunner(LoggingMixin):
         # Get optional JSON arguments
         self._wamrc_purecap_target_args_list = json_dict.get('wamrc_args_purecap', list())
         self._wamrc_hybrid_target_args_list = json_dict.get('wamrc_args_hybrid', list())
+        self._time_command_remote = json_dict.get('time_command', self.DEFAULT_TIME_COMMAND_REMOTE)
                 
         self._wamrc_host_dict = json_dict.get('wamrc_host')
         self._allowres = json_dict.get('allowres')
@@ -99,6 +104,8 @@ class BmTestRunner(LoggingMixin):
         # Save callback reference
         self._callback = None
         
+        self._time_search_string = None
+        
         # Test repeat count
         self._rep_count = repeat_count
 
@@ -115,6 +122,10 @@ class BmTestRunner(LoggingMixin):
     def set_callback(self, callback_fn):
         self._callback = callback_fn
                                                 
+    def profile_with_time(self, profile_search_string=None):
+        """ Set to run the command with /usr/bin/time profiling.  Pass search as None to clear this. """
+        self._time_search_string = profile_search_string
+        
     def run_test(self, test_file, test_type, test_file_type, repeat_count=None, expected_exit_code=0):
         """ Run the test on remote.  Repeat the given number of times.
             Returns time taken, or None on error
@@ -332,29 +343,41 @@ class BmTestRunner(LoggingMixin):
             cmd_string = ' '.join(str(cmd) for cmd in cmd_args)
         
             iwasm_prog = self._params_dict['wamr_purecap'] if test_type == TestType.PURECAP else self._params_dict['wamr_hybrid']
-        
-            r = conn.run(f'{iwasm_prog}{" " if cmd_string else ""}{cmd_string}', warn=True)
+
+            # If profile with time, then run the time command with the given profile string
+            execute_command = f'{iwasm_prog}{" " if cmd_string else ""}{cmd_string}'
             
-            # Check return code != 0 is an error
-            if r.exited != expected_exit_code:
+            if self._time_search_string:
+                execute_command = f'{self._time_command_remote} -f "{self._time_search_string}" ' + execute_command 
+            r = conn.run(execute_command, warn=True)
+            
+            # Check return code; either expected must be None (any match) or return code must match expected
+            if expected_exit_code and r.exited != expected_exit_code:
                 self._log.error(f'Remote WAMR failed: returned {r.exited}')
                 return None
             
             # Analyse the stdout with the callback function to recover time (or None)
-            return self._callback(r.stdout)
+            # In the case of time profiling, include the stderr output too
+            return self._callback(r.stdout) if not self._time_search_string else self._callback(r.stdout + r.stderr)
 
     def _run_native(self, conn, native_prog_to_run, expected_exit_code):
         """ Run the native program and parse stdout for the time taken (s). """
         with conn.cd(PurePosixPath(self._dest_folder)):
-            r = conn.run(f'{native_prog_to_run}', warn=True)
             
-            # Check return code != 0 is an error
-            if r.exited != expected_exit_code:
+            # If profile with time, then run the time command with the given profile string
+            if self._time_search_string:
+                r = conn.run(f'{self._time_command_remote} -f "{self._time_search_string}" {native_prog_to_run}', warn=True)
+            else:
+                r = conn.run(f'{native_prog_to_run}', warn=True)
+            
+            # Check return code; either expected must be None (any match) or return code must match expected
+            if expected_exit_code and r.exited != expected_exit_code:
                 self._log.error(f'Remote WAMR failed: returned {r.exited}')
                 return None
             
             # Analyse the stdout with the callback function to recover time (or None)
-            return self._callback(r.stdout)
+            # In the case of time profiling, include the stderr output too
+            return self._callback(r.stdout) if not self._time_search_string else self._callback(r.stdout + r.stderr)
 
     def _run_wamrc_remote(self, conn, remote_folder, cmd_args):
         wamrc_prog = self._params_dict['wamrc']
