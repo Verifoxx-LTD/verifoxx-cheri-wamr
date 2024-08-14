@@ -13,7 +13,7 @@ import os
 import sys
 
 from bm_test_collection import BmTestCollection
-from bm_test import (BmTestCoremark, BmTestDhrystone, BmTestPolybench)
+from bm_test import (BmTestCoremark, BmTestDhrystone, BmTestPolybench, BmTestSightglass)
 from test_runner import BmTestRunner
 from result_writer import ResultsWriter
 
@@ -55,6 +55,7 @@ def main():
         BmTestCollection('Coremark', 'coremark', args.folder, BmTestCoremark, test_runner, args.do_aot, args.do_native),
         BmTestCollection('Dhrystone', 'dhrystone', args.folder, BmTestDhrystone, test_runner, args.do_aot, args.do_native),
         BmTestCollection('Polybench', 'polybench', args.folder, BmTestPolybench, test_runner, args.do_aot, args.do_native),
+        BmTestCollection('Sightglass', 'sightglass', args.folder, BmTestSightglass, test_runner, args.do_aot, args.do_native),        
         ]
 
     log.info('Run collections...')

@@ -1,0 +1,47 @@
+﻿{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "ARMc64-PureCap-debug",
+      "displayName": "Debug armC64+ PureCap",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "llvm_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/${presetName}",
+        "CHERI_PURECAP": "1",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-arm",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true,
+            "additionalCompilerArgs": [ "-march=morello+c64", "-mabi=purecap" ]
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-arm",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    }
+  ]
+}
