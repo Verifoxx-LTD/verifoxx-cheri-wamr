@@ -18,7 +18,8 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
-
+#include <chrono>
+#include <thread>
 
 class TestType
 {
@@ -95,15 +96,15 @@ public:
 class SightglassTestType : public TestType
 {
 public:
+    // Sightglass doesn't output anything - we time it externally
+    // To give some variation, implement a delay for a random number of mS
+    // We will use m_Result as mS which will a maximum delay of 300mS
     virtual std::string get_stdout()
     {
-        std::stringstream strstr;
-
-        strstr << m_result << std::endl;
-
-        return strstr.str();
+        // Delay
+        std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(m_result)));
+        return std::string();
     }
-
 };
 
 

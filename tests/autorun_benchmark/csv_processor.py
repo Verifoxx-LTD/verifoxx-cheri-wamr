@@ -100,7 +100,8 @@ def _build_summary_percent_dict(coll_name, test_dict):
     
     # Now average out the percentages we calculated, but importantly ignore any which are zero
     for tft, res_list in tft_dict.items():
-        row_dict[MAPPER_DICT[tft]] = '{:.2f}'.format(fmean( (val for val in res_list if val != 0.0) ))
+        filtered_list = [val for val in res_list if val != 0.0]
+        row_dict[MAPPER_DICT[tft]] = '{:.2f}'.format(fmean( filtered_list if filtered_list else [0.0] ))
         
     
     return row_dict    
