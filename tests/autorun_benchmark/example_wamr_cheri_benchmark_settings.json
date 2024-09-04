@@ -1,0 +1,27 @@
+{
+	"hostname": "192.168.0.99",
+	"user": "root",
+	"key":  "~//.ssh//id_morello",
+	"dest": "/root/tmp/autorun-benchmark",
+	"wamr_purecap": "/root/benchmark-iwasms/iwasm_purecap_benchmark",
+	"wamr_hybrid": "/root/benchmark-iwasms/iwasm_hybrid_benchmark",
+	"wamrc": "/home/bob/wamrc",
+	"wamrc_args_purecap": ["--target=aarch64",
+					"--target-abi=musl_purecap",
+					"--cpu=rainier",
+					"--cpu-features=+morello,+c64"
+					],
+	"wamrc_args_hybrid": ["--target=aarch64",
+					"--target-abi=gnu",
+					"--cpu=rainier",
+					"--cpu-features=+morello"
+					],
+	"wamrc_host":
+	{
+    	"hostname": "localhost:2222",
+    	"user": "bob",
+    	"key": "~//.ssh//id_some_machine",
+    	"dest": "/home/bob/tmp"
+    }
+}
+
