@@ -12,7 +12,7 @@
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "$env{HOME}/install/${presetName}",
-      "toolchainFile": "toolchain.cmake",
+      "toolchainFile": "llvm_toolchain.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
@@ -31,7 +31,10 @@
         "WAMR_APP": "0",
         "WAMR_BUILD_NATIVE_TEST_LIB": "1",
         "WAMR_BUILD_AOT_CHERI_PTR": "16",
-        "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1"
+        "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1",
+        "WAMR_BUILD_PERF_PROFILING": "0",
+        "WAMR_BUILD_MEMORY_PROFILING": "0",
+        "WAMR_EXTERNREF_APP": "0"
       },
       "condition": {
         "type": "equals",

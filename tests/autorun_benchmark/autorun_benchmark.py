@@ -29,14 +29,14 @@ def main():
     parser.add_argument('-native', action='store_true', help='Run Native tests (default false)', dest='do_native')
     parser.add_argument('-r', '--repcount', type=int, help=f'Repeat count (default={REPEAT_COUNT_DEFAULT}', dest='rep_count', default=REPEAT_COUNT_DEFAULT)        
     parser.add_argument('-v', action='store_true', help='Verbose logging (default minimal logging)', dest='verbose')
-
+    parser.add_argument('-l', '--log', dest='logfile', help='Name of logfile to create (default is log only to stdout)')
     
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format='%(asctime)s %(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)]
+        handlers=[logging.StreamHandler(sys.stdout)] + ([logging.FileHandler(args.logfile)] if args.logfile else []),
     )
 
     log = logging.getLogger(__name__)
