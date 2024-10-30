@@ -30,6 +30,9 @@
 #define CHERI_PTR_TO_CAP(p) (p)
 #endif
 
+#else /* __CHERI__*/
+#define CHERI_CAP_TO_PTR(p) (p)
+#define CHERI_PTR_TO_CAP(p) (p)
 #endif
 
 #ifdef __cplusplus
