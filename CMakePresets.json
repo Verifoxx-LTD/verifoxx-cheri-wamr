@@ -294,6 +294,58 @@
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
         "WAMR_BUILD_PLATFORM": "linux"
       }
+    },
+    {
+      "name": "Benchmarks_Hybrid",
+      "displayName": "Benchmarks Debug arm64 Hybrid",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "BENCHMARKS": "1",
+        "CHERI_PURECAP":  "0"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "name": "Benchmarks_Purecap",
+	    "inherits": "Benchmarks_Hybrid",
+      "displayName": "Benchmarks Debug armC64+ Purecap",
+      "toolchainFile": "llvm_toolchain.cmake",
+      "cacheVariables": {
+  		"CHERI_PURECAP": "1"
+      }
     }
   ]
 }
