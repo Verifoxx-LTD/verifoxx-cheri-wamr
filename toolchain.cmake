@@ -14,5 +14,8 @@ if (NOT DEFINED CHERI_GNU_TOOLCHAIN_DIR)
     endif ()
 endif ()
 
-set(CMAKE_SYS_ROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
-message(STATUS "CMake sys root set to ${CMAKE_SYS_ROOT}")
+set(CMAKE_C_COMPILER_WORKS 1)
+set(CMAKE_CXX_COMPILER_WORKS 1)
+
+set(CMAKE_SYSROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
+message(STATUS "CMake sys root set to ${CMAKE_SYSROOT}")

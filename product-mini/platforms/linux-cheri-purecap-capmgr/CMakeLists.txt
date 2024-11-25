@@ -134,9 +134,9 @@ else ()
         message(STATUS "Toolchain binaries=${CHERI_GNU_TOOLCHAIN_DIR}/bin/${TOOLCHAIN_PREFIX}-*")
         message(STATUS "CMAKE_FIND_ROOT_PATH=${CMAKE_FIND_ROOT_PATH}")
 
-        if (NOT DEFINED CMAKE_SYS_ROOT)
-            set(CMAKE_SYS_ROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
-            message(STATUS "CMAKE_SYS_ROOT=${CHERI_GNU_TOOLCHAIN_DIR}")
+        if (NOT DEFINED CMAKE_SYSROOT)
+            set(CMAKE_SYSROOT "${CHERI_GNU_TOOLCHAIN_DIR}/libc")
+            message(STATUS "CMAKE_SYSROOT=${CHERI_GNU_TOOLCHAIN_DIR}")
         endif ()
     endif ()
 

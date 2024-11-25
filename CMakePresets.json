@@ -90,6 +90,7 @@
       "inherits": "ARMc64-PureCap-debug",
       "name": "ARMc64-PureCap-CapMgr-debug",
       "displayName": "Debug armC64+ CapMgr PureCap",
+      "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
         "WAMR_BUILD_PLATFORM": "linux-cheri-purecap-capmgr",
         "WAMR_BUILD_AOT": "0",
