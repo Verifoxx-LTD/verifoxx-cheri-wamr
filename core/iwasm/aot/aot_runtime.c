@@ -2754,7 +2754,7 @@ bool
 aot_alloc_frame(WASMExecEnv *exec_env, uint32 func_index)
 {
     AOTFrame *frame =
-        wasm_exec_env_alloc_wasm_frame(exec_env, sizeof(AOTFrame));
+        CHERI_CAP_TO_PTR(wasm_exec_env_alloc_wasm_frame(exec_env, sizeof(AOTFrame)));
 #if WASM_ENABLE_PERF_PROFILING != 0
     AOTModuleInstance *module_inst = (AOTModuleInstance *)exec_env->module_inst;
     AOTFuncPerfProfInfo *func_perf_prof =
@@ -2791,7 +2791,7 @@ aot_free_frame(WASMExecEnv *exec_env)
     cur_frame->func_perf_prof_info->total_exec_cnt++;
 #endif
 
-    wasm_exec_env_free_wasm_frame(exec_env, cur_frame);
+    wasm_exec_env_free_wasm_frame(exec_env, CHERI_PTR_TO_CAP(cur_frame));
     exec_env->cur_frame = (struct WASMInterpFrame *)prev_frame;
 }
 #endif /* end of (WASM_ENABLE_DUMP_CALL_STACK != 0) \
