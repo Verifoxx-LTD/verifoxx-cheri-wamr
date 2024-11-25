@@ -41,18 +41,21 @@ The following are supported:
 - WAMR_BUILD_PLATFORM=linux-cheri-purcap-capmgr    : The experimantal compartmentalised version which builds iwasm as a capability manager executable, and WAMR into a dynamic shared object library (libiwasm.so)
 
 ### The Toolchain File on CHERI platforms
-The Cmake build can use the toolchain file *toolchain.cmake* to build for CHERI platforms.  You should edit this file accordingly to specify the path to the GCC and GCC compiler binaries.
-The default provided assumes that their location is on your path.
+The Cmake build can use the toolchain file *toolchain.cmake* to build for CHERI platforms using the GNU toolchain, or *llvm_toolchain.cmake* for the LLVM toolchain.  You should edit the desired file accordingly to specify the path to the GCC and GCC compiler binaries.
 
-To use the toolchain file for CHERI you should also set an environment variable CHERI_GNU_TOOLCHAIN_DIR, which is the root of the GNU toolchain, or CHERI_LLVM_TOOLCHAIN_DIR, which is the root of the LLVM toolchain, as applicable.
+#### GNU Toolchain
+By default the toolchain file assumes that gcc and g++ are found on your path.  You must also set en evnironment variable CHERI_GNU_TOOLCHAIN_DIR to the folder containing the GNU toolchain, this is used to dervive _sysroot_.
 
+#### LLVM Toolchain
+If using the LLVM toolchain, set environment variable _CHERI_LLVM_TOOLCHAIN_DIR_ to the LLVM root folder (such that _clang_ would be found as _CHERI_LLVM_TOOLCHAIN_DIR/bin/clang_.  
+As LLVM toolchain for Morello depends on MUSL_LIBC, which is separately installed, you also need to set environment variables _CHERI_MUSL_TOOLCHAIN_DIR_ to the purecap build of MUSL and _CHERI_MUSL_TOOLCHAIN_DIR_HYBRIDCAP_ to the hybrid build of MUSL. Doing this allows the sysroot to be set correctly.
+
+#### Building without a Toolchain
 **Use of the toolchain file is optional**.  If you do not use the toolchain file, the CMakelists.txt will attempt to resolve your compilers based on the architecture you are running on.
 If this is aarch64 then it assumes you are building on the morello board.  Otherwise, it assumes you are cross-compiling.
 
 You will though need to provide the path to the GNU or LLVM toolchain root if they are not on your path.
-You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* or *-DCHERI_LLVM_TOOLCHAIN_DIR=/path/to/llvm/root* as a Cmake argument.
-
-**Note: LLVM toolchain port for CHERI uses MUSL C library. When using LLVM, to specify a MUSL root folder, use the flag CHERI_MUSL_TOOLCHAIN_DIR for example *-DCHERI_MUSL_TOOLCHAIN_DIR=/path/to/musl/root*.**
+You can provide this directly by passing *-DCHERI_GNU_TOOLCHAIN_DIR=/path/to/gnu/root* or *-DCHERI_LLVM_TOOLCHAIN_DIR=/path/to/llvm/root* as a Cmake argument. For LLVM you will also need to specify the MUSL root folder with *-DCHERI_MUSL_TOOLCHAIN_DIR* (purecap) or *-DCHERI_MUSL_TOOLCHAIN_DIR_HYBRIDCAP* (hybrid) as described above for building with an LLVM toolchain file.
 
 ### The Toolchain File on Linux x86_64 native platforms
 A basic toolchain file is also provided for GNU and LLVM to build for *Linux* on non-CHERI (assumed to be x86_64) platforms.
@@ -73,7 +76,7 @@ The root CMakeLists.txt will build the native libs shared object after building 
 ### Building without the bash script
 ``` Bash
 mkdir build && cd build
-cmake .. [--toolchain ../toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>|-DCHERI_LLVM_TOOLCHAIN_DIR=<path> -DCHERI_MUSL_TOOLCHAIN_DIR=<path>] \
+cmake .. [--toolchain ../toolchain.cmake|--toolchain ../llvm_toolchain.cmake|-DCHERI_GNU_TOOLCHAIN_DIR=<path>|-DCHERI_LLVM_TOOLCHAIN_DIR=<path> -DCHERI_MUSL_TOOLCHAIN_DIR=<path>] \
      -DCMAKE_BUILD_TYPE=Debug|Release --install-prefix=<path> \
 	-DWAMR_BUILD_PLATFORM=[linux-cheri-purecap|linux-cheri-purecap-capmgr] [-DCHERI_PURECAP=0|1] [-DCHERI_STATIC_BUILD=1|0] [-DWAMR_BUILD_NATIVE_TEST_LIB=0|1] \
 	-DWAMR_BUILD_AOT_CHERI_PTR=[0|8|16] -DWAMR_BUILD_AOT_EXCEPTION_WORKAROUND=[0|1] [-DWAMR_EXTERNREF_APP=0|1][<wamr-build-flags>]
@@ -108,14 +111,14 @@ Where:
 
 ### Bulding on the Morello Target
 This document assumes you will be cross-compiling, however you can build on the Morello target itself.
-To do this *either* update the *toolchain.cmake* file *or* supply the CHERI_[GNU|LLVM]_TOOLCHAIN_DIR flag if the GNU toolchain is not on your path (on the Morello board).
+To do this *either* update the relveant toolchain cmake file *or* supply the CHERI_[GNU|LLVM]_TOOLCHAIN_DIR flag if the GNU toolchain is not on your path (on the Morello board).
 The cmake script will then resolve the correct toolchain binaries, as if the architecure where it is being run is aarch64 then it is assumed to be building on the morello target.
 Otherwise, it will cross-compile.
 
 
 ## Building CHERI-WAMR using Visual Studio and WSL2
 The file *CMakePresets.json* is provided to support visual studio C++ CMake remote builds on a Linux Ubuntu machine running under WSL2.
-This provides separate configurations for:
+This provides separate configurations for building locally and cross-compliling for Morello:
 - Hybrid Debug
 - PureCap Debug (Standard CHERI port)
 - PureCap CapMgr Debug (Experimental compartmentalised CHERI port)
@@ -126,6 +129,9 @@ This provides separate configurations for:
 - Linux x86_64 Release (a non-CHERI baseline for santity testing)
 - Externref_App_Purecap (build a separate, standalone native exe for externref testing instead of WAMR (on Morello purecap))
 - Externref_App_x86_64 (build a separate, standalone native exe for externref testing instead of WAMR (on x86_64))
+- WAMRc Linux Debug x86_64 (build the WAMR Compiler to run on a non-Morello machine)
+- Benchmarks Debug Arm64 Hybrid (build the native benchmark tests for Morello hybrid)
+- Benchmarks Debug Arm64C+ Purecap (build the native benchmark tests for Morello purecap)
 
 To use VS with CMake and this project "out of the box" you will need to have first carried out the following pre-requisite steps:
 1. Enable WSL2 in Windows (10 or 11) and installed a suitable Ubuntu distro
@@ -460,8 +466,19 @@ When CHERI Morello pure-cap is a *potential* WAMRc Target:
 	- Build Morello Hybrid-cap with WAMR_BUILD_AOT_CHERI_PTR=16
 	- Build Morello pure-cap with WAMR_BUILD_AOT_CHERI_PTR=0 (or not defined)
 	
+## Benchmark Tests
+The original WAMR implementation supports a number of benchmark tests. See [Benchmarks](./tests/benchmarks) for more information.  
+These are still relevant, and have been adapted to support CHERI as follows:  
+ - Coremark, Dhrystone, Polybench and Sightglass Benchmark folders now each contain a _cheri_build.sh_ script along with _build.sh_ which allows building a hybrid aarch64 native as well as a purecap flavour application.
+ - Native applications support _CMake_ building, and _CMakePresets.json__ contains a "Benchmark Hybrid" and "Benchmark Purecap" configuration to allow hybrid and purecap native debug applications to be built for testing purposes, e.g from Visual Studio.
 
+Note that the native code has not been ported to CHERI; for example, the coremark native test application if built "as is" will cause a segmentation fault on Morello purecap.
 
+### Benchmark Autorun Script
+To obtain a measure of CHERI purecap performance vs hybrid performance we can run benchmark tests through WAMR on all relevant platforms. For this we have WASM on both WAMR purecap and WAMR hybrid, AOT for both and optionally a native application as well.  
+This is a significant loading when considering the large number of benchmark tests available.  To help in the execution of all of these a script has been developed which will automate the process of spinning up WAMR on the Morello box, run each test, and optionally additionally compile WASM to AOT suitable for the platform in question.  The script will run through all benchmarks, gather results in a CSV file and allow for offline processing to obtain metrics.
+
+Please refer to [Autorun Benchmark Script](./tests/autorun_benchmark/README.md) for more details.
 
 
 ORIGINAL DOCUMENT -> WebAssembly Micro Runtime
