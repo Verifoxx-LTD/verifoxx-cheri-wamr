@@ -75,7 +75,7 @@
 #endif
 
 #define AOT_MAGIC_NUMBER 0x746f6100
-#define AOT_CURRENT_VERSION 3
+#define AOT_CURRENT_VERSION 4       /* Updated due to format change to support CHERI */
 
 #ifndef WASM_ENABLE_JIT
 #define WASM_ENABLE_JIT 0
@@ -161,6 +161,17 @@
 #define WASM_ENABLE_LIB_PTHREAD_SEMAPHORE 0
 #endif
 
+#ifndef WASM_ENABLE_LIB_WASI_THREADS
+#define WASM_ENABLE_LIB_WASI_THREADS 0
+#endif
+
+#ifndef WASM_ENABLE_HEAP_AUX_STACK_ALLOCATION
+#define WASM_ENABLE_HEAP_AUX_STACK_ALLOCATION WASM_ENABLE_LIB_WASI_THREADS
+#elif WASM_ENABLE_HEAP_AUX_STACK_ALLOCATION == 0 \
+    && WASM_ENABLE_LIB_WASI_THREADS == 1
+#error "Heap aux stack allocation must be enabled for WASI threads"
+#endif
+
 #ifndef WASM_ENABLE_BASE_LIB
 #define WASM_ENABLE_BASE_LIB 0
 #endif
@@ -223,7 +234,7 @@
 
 /* WASM Interpreter labels-as-values feature */
 #ifndef WASM_ENABLE_LABELS_AS_VALUES
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__) /* Kind of pointless, since clang defines __GNUC__ but makes it explicit */
 #define WASM_ENABLE_LABELS_AS_VALUES 1
 #else
 #define WASM_ENABLE_LABELS_AS_VALUES 0
@@ -235,14 +246,10 @@
 #define WASM_ENABLE_FAST_INTERP 0
 #endif
 
-#if WASM_ENABLE_FAST_INTERP != 0
-#define WASM_DEBUG_PREPROCESSOR 0
-#endif
-
+/* Enable debug preprocessor or not */
 #ifndef WASM_DEBUG_PREPROCESSOR
 #define WASM_DEBUG_PREPROCESSOR 0
 #endif
-
 
 /* Enable opcode counter or not */
 #ifndef WASM_ENABLE_OPCODE_COUNTER
@@ -290,6 +297,9 @@
 #ifndef WASM_ENABLE_PERF_PROFILING
 #define WASM_ENABLE_PERF_PROFILING 0
 #endif
+#ifndef WASM_ENABLE_CHERI_PERF_PROFILING
+#define WASM_ENABLE_CHERI_PERF_PROFILING 0
+#endif
 
 /* Dump call stack */
 #ifndef WASM_ENABLE_DUMP_CALL_STACK
@@ -313,6 +323,11 @@
 
 #ifndef WASM_ENABLE_SPEC_TEST
 #define WASM_ENABLE_SPEC_TEST 0
+#endif
+
+/* AOT Exception workaround */
+#ifndef ENABLE_AOT_EXCEPTION_WORKAROUND
+#define ENABLE_AOT_EXCEPTION_WORKAROUND 0
 #endif
 
 /* Global heap pool size in bytes */
@@ -437,6 +452,24 @@
 
 #ifndef WASM_ENABLE_WASM_CACHE
 #define WASM_ENABLE_WASM_CACHE 0
+#endif
+
+#ifndef ENABLE_CHERI_PURECAP
+#define ENABLE_CHERI_PURECAP 0
+#endif
+
+#ifndef AOT_CHERI_PTR_SIZE
+#define AOT_CHERI_PTR_SIZE 0
+#endif
+
+/* ENABLE_CHERI_COMPARTMENT defined when code is built to a compartment */
+#ifndef ENABLE_CHERI_COMPARTMENT
+#define ENABLE_CHERI_COMPARTMENT 0
+#endif
+
+/* ENABLE_CHERI_CAPMGR defined when code is built to the capability manager */
+#ifndef ENABLE_CHERI_CAPMGR
+#define ENABLE_CHERI_CAPMGR 0
 #endif
 
 #endif /* end of _CONFIG_H_ */

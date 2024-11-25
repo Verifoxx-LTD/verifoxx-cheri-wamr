@@ -1,0 +1,7 @@
+{
+	"hostname": "192.168.0.39",
+	"key":  "~//.ssh//id_morello",
+	"user": "root",
+	"dest": "/root/tmp/.wasi-testsuite",
+	"wamr": "/root/wasi-test/iwasm"
+}

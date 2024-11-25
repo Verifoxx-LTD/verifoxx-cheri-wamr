@@ -21,6 +21,10 @@
 #endif
 #endif
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,6 +33,17 @@ bool runtime_signal_init();
 
 /* Internal use for setting default running mode */
 #define Mode_Default 0
+
+/* Support for CHERI pure-cap instruction store of label pointers */
+#if ENABLE_CHERI_PURECAP
+#define CHERI_POINTER_ALIGN  __BIGGEST_ALIGNMENT__
+
+// Allow space for pointer + maximum alignment, and ensure
+// this is itself aligned to even byte boundary
+#define CHERI_POINTER_STORAGE_SIZE ((sizeof(void *) + \
+        CHERI_POINTER_ALIGN + 1) & ~0x1)
+
+#endif /* ENABLE_CHERI_PURECAP && WASM_ENABLE_FAST_INTERP */
 
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS != 0
 
@@ -292,7 +307,13 @@ LOAD_I16(void *addr)
 #define LOAD_U32(addr) ((uint32)LOAD_I32(addr))
 #define LOAD_U16(addr) ((uint16)LOAD_I16(addr))
 
-#if UINTPTR_MAX == UINT32_MAX
+#if ENABLE_CHERI_PURECAP
+// STORE_PTR: On CHERI, store directly after first guaranteeing alignment
+static inline void STORE_PTR(void* addr, void* ptr)
+{
+    *(void**)cheri_align_up(addr, CHERI_POINTER_ALIGN) = ptr;
+}
+#elif UINTPTR_MAX == UINT32_MAX
 #define STORE_PTR(addr, ptr) STORE_U32(addr, (uintptr_t)ptr)
 #elif UINTPTR_MAX == UINT64_MAX
 #define STORE_PTR(addr, ptr) STORE_I64(addr, (uintptr_t)ptr)
@@ -527,8 +548,9 @@ wasm_runtime_unload(WASMModuleCommon *module);
 /* Internal API */
 WASMModuleInstanceCommon *
 wasm_runtime_instantiate_internal(WASMModuleCommon *module, bool is_sub_inst,
-                                  uint32 stack_size, uint32 heap_size,
-                                  char *error_buf, uint32 error_buf_size);
+                                  WASMExecEnv *exec_env_main, uint32 stack_size,
+                                  uint32 heap_size, char *error_buf,
+                                  uint32 error_buf_size);
 
 /* Internal API */
 void
@@ -537,8 +559,8 @@ wasm_runtime_deinstantiate_internal(WASMModuleInstanceCommon *module_inst,
 
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN WASMModuleInstanceCommon *
-wasm_runtime_instantiate(WASMModuleCommon *module, uint32 stack_size,
-                         uint32 heap_size, char *error_buf,
+wasm_runtime_instantiate(WASMModuleCommon *module, uint32 default_stack_size,
+                         uint32 host_managed_heap_size, char *error_buf,
                          uint32 error_buf_size);
 
 /* See wasm_export.h for description */
@@ -644,6 +666,11 @@ wasm_runtime_call_wasm_v(WASMExecEnv *exec_env,
                          uint32 num_results, wasm_val_t *results,
                          uint32 num_args, ...);
 
+/* See wasm_export.h for description */
+WASM_RUNTIME_API_EXTERN bool
+wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_index,
+                           uint32 argc, uint32 argv[]);
+
 #if WASM_ENABLE_DEBUG_INTERP != 0
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN uint32
@@ -654,27 +681,6 @@ wasm_runtime_start_debug_instance_with_port(WASMExecEnv *exec_env,
 WASM_RUNTIME_API_EXTERN uint32
 wasm_runtime_start_debug_instance(WASMExecEnv *exec_env);
 #endif
-
-/**
- * Call a function reference of a given WASM runtime instance with
- * arguments.
- *
- * @param exec_env the execution environment to call the function
- *   which must be created from wasm_create_exec_env()
- * @param element_indices the function ference indicies, usually
- *   prvovided by the caller of a registed native function
- * @param argc the number of arguments
- * @param argv the arguments.  If the function method has return value,
- *   the first (or first two in case 64-bit return value) element of
- *   argv stores the return value of the called WASM function after this
- *   function returns.
- *
- * @return true if success, false otherwise and exception will be thrown,
- *   the caller can call wasm_runtime_get_exception to get exception info.
- */
-bool
-wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_indices,
-                           uint32 argc, uint32 argv[]);
 
 bool
 wasm_runtime_create_exec_env_singleton(WASMModuleInstanceCommon *module_inst);
@@ -719,6 +725,23 @@ wasm_runtime_set_custom_data(WASMModuleInstanceCommon *module_inst,
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN void *
 wasm_runtime_get_custom_data(WASMModuleInstanceCommon *module_inst);
+
+/* Internal API */
+uint32
+wasm_runtime_module_malloc_internal(WASMModuleInstanceCommon *module_inst,
+                                    WASMExecEnv *exec_env, uint32 size,
+                                    void **p_native_addr);
+
+/* Internal API */
+uint32
+wasm_runtime_module_realloc_internal(WASMModuleInstanceCommon *module_inst,
+                                     WASMExecEnv *exec_env, uint32 ptr,
+                                     uint32 size, void **p_native_addr);
+
+/* Internal API */
+void
+wasm_runtime_module_free_internal(WASMModuleInstanceCommon *module_inst,
+                                  WASMExecEnv *exec_env, uint32 ptr);
 
 /* See wasm_export.h for description */
 WASM_RUNTIME_API_EXTERN uint32
@@ -1029,6 +1052,28 @@ wasm_runtime_is_import_func_linked(const char *module_name,
 WASM_RUNTIME_API_EXTERN bool
 wasm_runtime_is_import_global_linked(const char *module_name,
                                      const char *global_name);
+
+// CHERI inlines for r/w externref types
+#if (WASM_ENABLE_REF_TYPES && ENABLE_CHERI_PURECAP)
+
+/* Always leave space for 2 x ptr on CHERI to support possible alignment */
+static inline uint32 wasm_cheri_externref_size()
+{
+    return (sizeof(uintptr_t) << 1) / sizeof(uint32);
+}
+
+static inline uint32 wasm_cheri_externref_is_null(uintptr_t externref)
+{
+    return !cheri_tag_get(externref) && ((uint64)-1LL == (uint64)externref || (uint64)0LL == (uint64)externref);
+}
+
+/* Read uintptr_t from array at given offset and advance offset accordingly */
+uintptr_t wasm_cheri_read_externref_from_array(uint32* array, uint32* offset_ref);
+
+/* Write uintptr_t to array at given offset and advance offset accordingly*/
+void wasm_cheri_write_externref_to_array(uintptr_t externref, uint32* array, uint32* offset_ref);
+#endif
+
 
 #ifdef __cplusplus
 }

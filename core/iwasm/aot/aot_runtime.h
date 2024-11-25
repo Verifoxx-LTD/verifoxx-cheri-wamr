@@ -78,7 +78,7 @@ typedef struct AOTFunctionInstance {
 } AOTFunctionInstance;
 
 typedef struct AOTModuleInstanceExtra {
-    CApiFuncImport *c_api_func_imports;
+    CApiFuncImport* c_api_func_imports;
 #if WASM_ENABLE_WASI_NN != 0
     WASINNContext *wasi_nn_ctx;
 #endif
@@ -251,6 +251,11 @@ typedef struct AOTModule {
 #if WASM_ENABLE_LOAD_CUSTOM_SECTION != 0
     WASMCustomSection *custom_section_list;
 #endif
+#if ENABLE_CHERI_PURECAP
+    // Pre-allocated mmap() area to use for all the init data sections
+    void *init_data_mmap_region;
+    uint64 text_data_mmap_size; // Total size mmap'd for text+optionally data
+#endif
 } AOTModule;
 
 #define AOTMemoryInstance WASMMemoryInstance
@@ -343,8 +348,9 @@ aot_unload(AOTModule *module);
  * @return return the instantiated AOT module instance, NULL if failed
  */
 AOTModuleInstance *
-aot_instantiate(AOTModule *module, bool is_sub_inst, uint32 stack_size,
-                uint32 heap_size, char *error_buf, uint32 error_buf_size);
+aot_instantiate(AOTModule *module, bool is_sub_inst, WASMExecEnv *exec_env_main,
+                uint32 stack_size, uint32 heap_size, char *error_buf,
+                uint32 error_buf_size);
 
 /**
  * Deinstantiate a AOT module instance, destroy the resources.
@@ -387,11 +393,6 @@ bool
 aot_call_function(WASMExecEnv *exec_env, AOTFunctionInstance *function,
                   unsigned argc, uint32 argv[]);
 
-bool
-aot_create_exec_env_and_call_function(AOTModuleInstance *module_inst,
-                                      AOTFunctionInstance *function,
-                                      unsigned argc, uint32 argv[]);
-
 /**
  * Set AOT module instance exception with exception string
  *
@@ -414,6 +415,27 @@ aot_set_exception_with_id(AOTModuleInstance *module_inst, uint32 id);
  */
 const char *
 aot_get_exception(AOTModuleInstance *module_inst);
+
+/**
+ * @brief Copy exception in buffer passed as parameter. Thread-safe version of
+ * `aot_get_exception()`
+ * @note Buffer size must be no smaller than EXCEPTION_BUF_LEN
+ * @return true if exception found, false otherwise
+ */
+bool
+aot_copy_exception(AOTModuleInstance *module_inst, char *exception_buf);
+
+uint32
+aot_module_malloc_internal(AOTModuleInstance *module_inst, WASMExecEnv *env,
+                           uint32 size, void **p_native_addr);
+
+uint32
+aot_module_realloc_internal(AOTModuleInstance *module_inst, WASMExecEnv *env,
+                            uint32 ptr, uint32 size, void **p_native_addr);
+
+void
+aot_module_free_internal(AOTModuleInstance *module_inst, WASMExecEnv *env,
+                         uint32 ptr);
 
 uint32
 aot_module_malloc(AOTModuleInstance *module_inst, uint32 size,

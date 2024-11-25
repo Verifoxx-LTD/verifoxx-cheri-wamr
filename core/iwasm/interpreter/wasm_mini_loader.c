@@ -2025,6 +2025,11 @@ orcjit_thread_callback(void *arg)
             return NULL;
         }
     }
+#if WASM_ENABLE_JIT != 0 && WASM_ENABLE_LAZY_JIT != 0
+    os_mutex_lock(&module->tierup_wait_lock);
+    module->fast_jit_ready_groups++;
+    os_mutex_unlock(&module->tierup_wait_lock);
+#endif
 #endif
 
 #if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
@@ -2052,9 +2057,11 @@ orcjit_thread_callback(void *arg)
         }
     }
 
-    /* Wait until init_llvm_jit_functions_stage2 finishes */
+    /* Wait until init_llvm_jit_functions_stage2 finishes and all
+       fast jit functions are compiled */
     os_mutex_lock(&module->tierup_wait_lock);
-    while (!(module->llvm_jit_inited && module->enable_llvm_jit_compilation)) {
+    while (!(module->llvm_jit_inited && module->enable_llvm_jit_compilation
+             && module->fast_jit_ready_groups >= group_stride)) {
         os_cond_reltimedwait(&module->tierup_wait_cond,
                              &module->tierup_wait_lock, 10000);
         if (module->orcjit_stop_compiling) {
@@ -2725,7 +2732,8 @@ create_module(char *error_buf, uint32 error_buf_size)
     bh_assert(ret == BH_LIST_SUCCESS);
 #endif
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     if (os_mutex_init(&module->instance_list_lock) != 0) {
         set_error_buf(error_buf, error_buf_size,
                       "init instance list lock failed");
@@ -2946,7 +2954,8 @@ wasm_loader_unload(WASMModule *module)
     if (!module)
         return;
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     module->orcjit_stop_compiling = true;
     if (module->llvm_jit_init_thread)
         os_thread_join(module->llvm_jit_init_thread, NULL);
@@ -2967,7 +2976,8 @@ wasm_loader_unload(WASMModule *module)
         aot_destroy_comp_data(module->comp_data);
 #endif
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     if (module->tierup_wait_lock_inited) {
         os_mutex_destroy(&module->tierup_wait_lock);
         os_cond_destroy(&module->tierup_wait_cond);
@@ -3063,7 +3073,8 @@ wasm_loader_unload(WASMModule *module)
     }
 #endif
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     os_mutex_destroy(&module->instance_list_lock);
 #endif
 
@@ -6373,12 +6384,13 @@ re_scan:
                     goto fail;
                 }
 
-                if (func_idx == cur_func_idx + module->import_function_count) {
+                /* Refer to a forward-declared function */
+                if (func_idx >= cur_func_idx + module->import_function_count) {
                     WASMTableSeg *table_seg = module->table_segments;
                     bool func_declared = false;
                     uint32 j;
 
-                    /* Check whether current function is declared */
+                    /* Check whether the function is declared in table segs */
                     for (i = 0; i < module->table_seg_count; i++, table_seg++) {
                         if (table_seg->elem_type == VALUE_TYPE_FUNCREF
                             && wasm_elem_is_declarative(table_seg->mode)) {
@@ -6391,10 +6403,17 @@ re_scan:
                         }
                     }
                     if (!func_declared) {
-                        set_error_buf(error_buf, error_buf_size,
-                                      "undeclared function reference");
-                        goto fail;
+                        /* Check whether the function is exported */
+                        for (i = 0; i < module->export_count; i++) {
+                            if (module->exports[i].kind == EXPORT_KIND_FUNC
+                                && module->exports[i].index == func_idx) {
+                                func_declared = true;
+                                break;
+                            }
+                        }
                     }
+                    bh_assert(func_declared);
+                    (void)func_declared;
                 }
 
 #if WASM_ENABLE_FAST_INTERP != 0

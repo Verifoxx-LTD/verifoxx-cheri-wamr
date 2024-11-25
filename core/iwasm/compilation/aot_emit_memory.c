@@ -7,6 +7,7 @@
 #include "aot_emit_exception.h"
 #include "../aot/aot_runtime.h"
 #include "aot_intrinsic.h"
+#include "aot_emit_control.h"
 
 #define BUILD_ICMP(op, left, right, res, name)                                \
     do {                                                                      \
@@ -714,7 +715,7 @@ aot_compile_op_memory_grow(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
 
     if (comp_ctx->is_jit_mode) {
         /* JIT mode, call the function directly */
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add pointer type failed.");
             return false;
         }
@@ -725,7 +726,7 @@ aot_compile_op_memory_grow(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         }
     }
     else if (comp_ctx->is_indirect_mode) {
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -1008,7 +1009,7 @@ aot_compile_op_memory_copy(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
             return false;
         }
 
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function pointer type failed.");
             return false;
         }
@@ -1085,7 +1086,7 @@ aot_compile_op_memory_fill(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
         return false;
     }
 
-    if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+    if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
         aot_set_last_error("create LLVM function pointer type failed.");
         return false;
     }
@@ -1344,7 +1345,7 @@ aot_compile_op_atomic_wait(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
         return false;
     }
 
-    BUILD_ICMP(LLVMIntSGT, ret_value, I32_ZERO, cmp, "atomic_wait_ret");
+    BUILD_ICMP(LLVMIntNE, ret_value, I32_NEG_ONE, cmp, "atomic_wait_ret");
 
     ADD_BASIC_BLOCK(wait_fail, "atomic_wait_fail");
     ADD_BASIC_BLOCK(wait_success, "wait_success");
@@ -1367,6 +1368,14 @@ aot_compile_op_atomic_wait(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     LLVMPositionBuilderAtEnd(comp_ctx->builder, wait_success);
 
     PUSH_I32(ret_value);
+
+#if WASM_ENABLE_THREAD_MGR != 0
+    /* Insert suspend check point */
+    if (comp_ctx->enable_thread_mgr) {
+        if (!check_suspend_flags(comp_ctx, func_ctx))
+            return false;
+    }
+#endif
 
     return true;
 fail:
@@ -1412,6 +1421,15 @@ aot_compiler_op_atomic_notify(AOTCompContext *comp_ctx,
     return true;
 fail:
     return false;
+}
+
+bool
+aot_compiler_op_atomic_fence(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx)
+{
+    return LLVMBuildFence(comp_ctx->builder,
+                          LLVMAtomicOrderingSequentiallyConsistent, false, "")
+               ? true
+               : false;
 }
 
 #endif /* end of WASM_ENABLE_SHARED_MEMORY */

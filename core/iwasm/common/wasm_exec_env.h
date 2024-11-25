@@ -13,6 +13,26 @@
 
 #ifdef __CHERI__
 #include <cheriintrin.h>
+
+ // Helper macro for capability to pointer conversion on hybrid
+#if !defined(__CHERI_PURE_CAPABILITY__)
+#define CHERI_CAP_TO_PTR(p) (((void*)cheri_address_get((void * __capability)(p))))
+#else
+#define CHERI_CAP_TO_PTR(p) (p)
+#endif
+
+ // Helper macro for pointer to capability conversion on hybrid
+#if !defined(__CHERI_PURE_CAPABILITY__) && defined(__clang__)
+#define CHERI_PTR_TO_CAP(p) ((void * __capability)((void *)(p)))
+#elif !defined(__CHERI_PURE_CAPABILITY__) && defined(__GNUC__)
+#define CHERI_PTR_TO_CAP(p) ((void * __capability)((void *)(p)))
+#else
+#define CHERI_PTR_TO_CAP(p) (p)
+#endif
+
+#else /* __CHERI__*/
+#define CHERI_CAP_TO_PTR(p) (p)
+#define CHERI_PTR_TO_CAP(p) (p)
 #endif
 
 #ifdef __cplusplus
@@ -38,6 +58,14 @@ typedef struct WASMJmpBuf {
 
 #ifdef __CHERI__
 // @see : cheri_mem_mgmt.h
+
+/* Our stack structure:
+|.................<allocated space>......................|xx|
+^           ^                                             ^
+|           |                                             |
+bottom    -->  top grows -->                        top_boundary
+*/
+
 typedef struct
 {
     uint8* __capability top_boundary;
@@ -160,7 +188,7 @@ typedef struct WASMExecEnv {
 #ifdef __CHERI__
     BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
-    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE] __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+    BlockAddr block_addr_cache[BLOCK_ADDR_CACHE_SIZE][BLOCK_ADDR_CONFLICT_SIZE];
 #endif
 #endif
 
@@ -172,9 +200,11 @@ typedef struct WASMExecEnv {
 #endif
     /* One guard page for the exception check */
     uint8 *exce_check_guard_page;
-#endif
+#elif ENABLE_AOT_EXCEPTION_WORKAROUND != 0
+    bool wasi_proc_exit_called;
+#endif  /* OS_ENABLE_HW_BOUND_CHECK */
 
-#if WASM_ENABLE_MEMORY_PROFILING != 0
+#if (WASM_ENABLE_MEMORY_PROFILING != 0) || (WASM_ENABLE_MEMORY_TRACING != 0)
     uint32 max_wasm_stack_used;
 #endif
 
@@ -234,6 +264,13 @@ wasm_exec_env_create(struct WASMModuleInstanceCommon *module_inst,
 void
 wasm_exec_env_destroy(WASMExecEnv *exec_env);
 
+static inline bool
+wasm_exec_env_is_aux_stack_managed_by_runtime(WASMExecEnv *exec_env)
+{
+    return exec_env->aux_stack_boundary.boundary != 0
+           || exec_env->aux_stack_bottom.bottom != 0;
+}
+
 /**
  * Allocate a WASM frame from the WASM stack.
  *
@@ -249,6 +286,10 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv* exec_env, size_t size)
 {
     // Size must be aligned
     bh_assert(cheri_is_aligned(size, __BIGGEST_ALIGNMENT__));
+
+    LOG_VERBOSE("Alloc frame++: Stack top addr=0x%" PRIx64
+        ", Boundary = 0x%" PRIx64
+        ", size = %d\n", exec_env->wasm_stack_p->top, exec_env->wasm_stack_p->top_boundary, size);
 
     // On CHERI, we want the frame to start on an aligned address and be an aligned size
     exec_env->wasm_stack_p->top = cheri_align_up(exec_env->wasm_stack_p->top, __BIGGEST_ALIGNMENT__);
@@ -271,6 +312,8 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv* exec_env, size_t size)
             exec_env->max_wasm_stack_used = wasm_stack_used;
     }
 #endif
+
+    LOG_VERBOSE("Alloc frame--: Returned addr=0x%" PRIx64 "\n", addr);
 
     return addr;
 }
@@ -310,18 +353,21 @@ wasm_exec_env_alloc_wasm_frame(WASMExecEnv * exec_env, unsigned size)
 }
 #endif /* __CHERI__ */
 
-
-static inline void
-wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *__capability prev_top)
-{
 #ifdef __CHERI__
+static inline void
+wasm_exec_env_free_wasm_frame(WASMExecEnv* exec_env, void* __capability prev_top)
+{
     bh_assert((uintptr_t)prev_top >= (uintptr_t)exec_env->wasm_stack_p->bottom);
-    exec_env->wasm_stack_p->top = (uint8*__capability)prev_top;
+    exec_env->wasm_stack_p->top = (uint8 * __capability)prev_top;
+}
 #else
+static inline void
+wasm_exec_env_free_wasm_frame(WASMExecEnv *exec_env, void *prev_top)
+{
     bh_assert((uint8*)prev_top >= exec_env->wasm_stack.s.bottom);
     exec_env->wasm_stack.s.top = (uint8*)prev_top;
-#endif
 }
+#endif
 
 /**
  * Get the current WASM stack top pointer.
@@ -334,7 +380,7 @@ static inline void *
 wasm_exec_env_wasm_stack_top(WASMExecEnv *exec_env)
 {
 #ifdef __CHERI__
-    return (void*)exec_env->wasm_stack_p->top;
+    return CHERI_CAP_TO_PTR(exec_env->wasm_stack_p->top);
 #else
     return exec_env->wasm_stack.s.top;
 #endif

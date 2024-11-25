@@ -5,6 +5,8 @@ cmake_minimum_required (VERSION 3.14)
 
 include(CheckPIESupported)
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 if (NOT DEFINED WAMR_BUILD_PLATFORM)
   if (CMAKE_SYSTEM_NAME)
     string(TOLOWER ${CMAKE_SYSTEM_NAME} WAMR_BUILD_PLATFORM)
@@ -44,6 +46,7 @@ add_definitions(-DWASM_ENABLE_CUSTOM_NAME_SECTION=1)
 add_definitions(-DWASM_ENABLE_DUMP_CALL_STACK=1)
 add_definitions(-DWASM_ENABLE_PERF_PROFILING=1)
 add_definitions(-DWASM_ENABLE_LOAD_CUSTOM_SECTION=1)
+add_definitions(-DWASM_ENABLE_LIB_WASI_THREADS=1)
 
 if (WAMR_BUILD_LLVM_LEGACY_PM EQUAL 1)
   add_definitions(-DWASM_ENABLE_LLVM_LEGACY_PM=1)
@@ -51,6 +54,11 @@ endif()
 
 if (DEFINED WAMR_BUILD_AOT_FUNC_PREFIX)
   add_definitions(-DAOT_FUNC_PREFIX="${WAMR_BUILD_AOT_FUNC_PREFIX}")
+endif ()
+
+if (DEFINED WAMR_BUILD_AOT_CHERI_PTR AND WAMR_BUILD_AOT_CHERI_PTR GREATER 0)
+    # Force use of CHERI pointer with given alignment
+    add_definitions(-DAOT_CHERI_PTR_SIZE=${WAMR_BUILD_AOT_CHERI_PTR})
 endif ()
 
 # Set WAMR_BUILD_TARGET, currently values supported:
@@ -149,11 +157,20 @@ if (NOT WAMR_BUILD_WITH_CUSTOM_LLVM)
 endif ()
 
 find_package(LLVM REQUIRED CONFIG)
+
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "LLVM Include dirs: ${LLVM_INCLUDE_DIRS}")
+message(STATUS "LLVM definitions: ${LLVM_DEFINITIONS}")
+message(STATUS "LLVM Libs: ${LLVM_AVAILABLE_LIBS}")
+message(STATUS "LLVM Library dirs: ${LLVM_LIBRARY_DIRS}")
+
+# Set link path so we can find at runtime
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 
 if (WAMR_BUILD_DEBUG_AOT EQUAL 1)
   if(LLVM_BUILD_MAIN_SRC_DIR)
@@ -164,6 +181,12 @@ if (WAMR_BUILD_DEBUG_AOT EQUAL 1)
   find_library(lib_lldb NAMES lldb HINTS ${LLVM_LIBRARY_DIRS} REQUIRED)
   message(STATUS "find lldb ${LLDB_ALL_PLUGINS} in: ${LLVM_LIBRARY_DIRS}")
 endif()
+
+if ("$ENV{COLLECT_CODE_COVERAGE}" STREQUAL "1" OR COLLECT_CODE_COVERAGE EQUAL 1)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
+  message ("-- Collect code coverage enabled")
+endif ()
 
 if (NOT (CMAKE_C_COMPILER MATCHES ".*clang.*" OR CMAKE_C_COMPILER_ID MATCHES ".*Clang"))
   if(NOT MSVC)
@@ -177,6 +200,7 @@ if (NOT MSVC)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wformat -Wformat-security \
                                        -ffunction-sections -fdata-sections \
                                        -Wno-unused-parameter -Wno-pedantic")
+
   # Remove the extra spaces for better make log
   string (REGEX REPLACE "  *" " " CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
 endif()
@@ -204,6 +228,7 @@ if (NOT MINGW)
   endif()
 endif()
 include (${IWASM_DIR}/libraries/lib-pthread/lib_pthread.cmake)
+include (${IWASM_DIR}/libraries/lib-wasi-threads/lib_wasi_threads.cmake)
 include (${IWASM_DIR}/common/iwasm_common.cmake)
 include (${IWASM_DIR}/interpreter/iwasm_interp.cmake)
 include (${IWASM_DIR}/aot/iwasm_aot.cmake)
@@ -238,6 +263,11 @@ endif()
 # We disable these flags by default to stay the same with wasm runtime
 # set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mindirect-branch=thunk -mfunction-return=thunk")
 
+# Note: If linking against static LLVM Libs with debug info, wamrc will end up huge
+# If you run out of RAM on the target machine (and get a sig kill sent to the linker) then
+# try uncommenting the below first
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
+
 if (NOT MSVC)
   add_definitions(-D_FORTIFY_SOURCE=2)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ftrapv")
@@ -258,6 +288,7 @@ add_library (vmlib
              ${LIBC_BUILTIN_SOURCE}
              ${LIBC_WASI_SOURCE}
              ${LIB_PTHREAD_SOURCE}
+             ${LIB_WASI_THREADS_SOURCE}
              ${IWASM_COMMON_SOURCE}
              ${IWASM_INTERP_SOURCE}
              ${IWASM_AOT_SOURCE})
@@ -273,6 +304,8 @@ if (LLVM_LINK_LLVM_DYLIB)
 else()
   set(WAMRC_LINK_LLVM_LIBS ${LLVM_AVAILABLE_LIBS})
 endif()
+
+message(STATUS "WAMRC_LINK_LLVM_LIBS: ${WAMRC_LINK_LLVM_LIBS}")
 
 if (NOT MSVC)
   target_link_libraries (wamrc aotclib vmlib ${WAMRC_LINK_LLVM_LIBS} ${lib_ubsan}

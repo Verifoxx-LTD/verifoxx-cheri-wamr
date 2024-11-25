@@ -1,0 +1,10 @@
+{
+	"hostname": "192.168.0.39",
+	"user": "root",
+	"key":  "~//.ssh//id_morello",
+	"dest": "/root/tmp/.wasi-testsuite",
+	"wamr": "/root/tmp/linux-cheri-purecap-capmgr/iwasm",
+	"libiwasm": "/root/tmp/linux-cheri-purecap-capmgr/libiwasm.so",
+    "addrpool" : "0.0.0.0/0",
+    "allowres" : "*"
+}

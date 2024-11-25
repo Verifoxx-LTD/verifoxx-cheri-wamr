@@ -493,6 +493,20 @@ get_import_func_info_size(AOTCompContext *comp_ctx, AOTCompData *comp_data)
 }
 
 static uint32
+get_object_data_used_size(AOTCompContext* comp_ctx,
+    AOTObjectData* obj_data)
+{
+    AOTObjectDataSection* data_section = obj_data->data_sections;
+    uint32 size = 0, i = 0;
+
+    while (i++ < obj_data->data_sections_count)
+        size += data_section++->size;
+
+    return size;
+}
+
+
+static uint32
 get_object_data_sections_size(AOTCompContext *comp_ctx,
                               AOTObjectDataSection *data_sections,
                               uint32 data_sections_count)
@@ -515,9 +529,9 @@ static uint32
 get_object_data_section_info_size(AOTCompContext *comp_ctx,
                                   AOTObjectData *obj_data)
 {
-    /* data sections count + data sections */
-    return (uint32)sizeof(uint32)
-           + get_object_data_sections_size(comp_ctx, obj_data->data_sections,
+    /* Note: data sections count now earlier in file structure
+     * Data sections size here */
+    return get_object_data_sections_size(comp_ctx, obj_data->data_sections,
                                            obj_data->data_sections_count);
 }
 
@@ -526,6 +540,8 @@ get_init_data_section_size(AOTCompContext *comp_ctx, AOTCompData *comp_data,
                            AOTObjectData *obj_data)
 {
     uint32 size = 0;
+
+    size += sizeof(uint32) * 2; // data sections count (moved in format) + total data size (new field)
 
     size += get_mem_info_size(comp_data);
 
@@ -1617,7 +1633,7 @@ aot_emit_object_data_section_info(uint8 *buf, uint8 *buf_end, uint32 *p_offset,
 
     *p_offset = offset = align_uint(offset, 4);
 
-    EMIT_U32(obj_data->data_sections_count);
+    // Note: data section count no longer emitted here, now emitted earlier
 
     for (i = 0; i < obj_data->data_sections_count; i++, data_section++) {
         offset = align_uint(offset, 2);
@@ -1651,6 +1667,13 @@ aot_emit_init_data_section(uint8 *buf, uint8 *buf_end, uint32 *p_offset,
 
     EMIT_U32(AOT_SECTION_TYPE_INIT_DATA);
     EMIT_U32(section_size);
+
+    /* AOT format change: emit the count of init data sections earlier in format,
+     * and now emit their total data size too.
+     * Needed on CHERI platforms so we can peek the size to be allocated for initial mmap().
+     */
+    EMIT_U32(obj_data->data_sections_count);
+    EMIT_U32(get_object_data_used_size(comp_ctx, obj_data));
 
     if (!aot_emit_mem_info(buf, buf_end, &offset, comp_ctx, comp_data, obj_data)
         || !aot_emit_table_info(buf, buf_end, &offset, comp_ctx, comp_data,

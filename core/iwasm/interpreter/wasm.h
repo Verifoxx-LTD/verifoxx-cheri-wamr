@@ -228,13 +228,15 @@ typedef struct WASMImport {
             char* module_name;
             char* field_name;
 #ifdef __CHERI__
-        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
+        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
     } u __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+} WASMImport __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 #else
-        } names __attribute__((aligned(__BIGGEST_ALIGNMENT__)));;
+        } names;
     } u;
-#endif
 } WASMImport;
+#endif
+
 
 struct WASMFunction {
 #if WASM_ENABLE_CUSTOM_NAME_SECTION != 0
@@ -526,8 +528,8 @@ struct WASMModule {
     uint64 load_size;
 #endif
 
-#if WASM_ENABLE_DEBUG_INTERP != 0                    \
-    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT \
+#if WASM_ENABLE_DEBUG_INTERP != 0                         \
+    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
         && WASM_ENABLE_LAZY_JIT != 0)
     /**
      * List of instances referred to this module. When source debugging
@@ -618,6 +620,13 @@ struct WASMModule {
        since no need to enable llvm jit compilation for Mode_Interp and
        Mode_Fast_JIT, so as to improve performance for them */
     bool enable_llvm_jit_compilation;
+    /* The count of groups which finish compiling the fast jit
+       functions in that group */
+    uint32 fast_jit_ready_groups;
+#endif
+
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_load_time;           /* Time taken to load module */
 #endif
 };
 
@@ -735,7 +744,11 @@ inline static uint16
 wasm_value_type_cell_num_outside(uint8 value_type)
 {
     if (VALUE_TYPE_EXTERNREF == value_type) {
+#if ENABLE_CHERI_PURECAP
+        return (sizeof(uintptr_t) << 1) / sizeof(uint32); // Double size of ptr on CHERI allows for alignment
+#else
         return sizeof(uintptr_t) / sizeof(uint32);
+#endif
     }
     else {
         return wasm_value_type_cell_num(value_type);

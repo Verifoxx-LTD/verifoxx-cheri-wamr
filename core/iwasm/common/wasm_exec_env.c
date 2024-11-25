@@ -24,7 +24,7 @@
 #endif
 
 #ifdef __CHERI__
-#include "cheri_mem_mgt_c_api.h"
+#include "cheri_mem_mgmt_c_api.h"
 #endif
 
 WASMExecEnv *
@@ -33,8 +33,23 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
 {
 
 #ifdef __CHERI__
-    WASMExecEnv* exec_env = wasm_runtime_malloc(sizeof(WASMExecEnv));
-    memset(exec_env, 0, sizeof(WASMExecEnv));
+    WASMExecEnv* exec_env;
+    WASMCheriStack_t* __capability cheri_stack;
+
+    // Update stack size: allow for CHERI alignment
+    stack_size = cheri_wasm_update_stack_size(stack_size);
+
+    uint64 total_size = sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t) + (uint64)stack_size;
+
+    if (total_size >= UINT32_MAX
+        || !(exec_env = wasm_runtime_malloc(sizeof(WASMExecEnv)))
+        || !(cheri_stack = cheri_wasm_create_stack_struct()))
+    {
+        return NULL;
+    }
+    memset(exec_env, 0, (uint32)sizeof(WASMExecEnv));
+
+
 #else
     uint64 total_size =
         offsetof(WASMExecEnv, wasm_stack.s.bottom) + (uint64)stack_size;
@@ -75,8 +90,8 @@ wasm_exec_env_create_internal(struct WASMModuleInstanceCommon *module_inst,
     exec_env->module_inst = module_inst;
 
 #ifdef __CHERI__
-    exec_env->wasm_stack_size = cheri_wasm_get_stack_size();
-    exec_env->wasm_stack_p = cheri_wasm_get_stack_struct();
+    exec_env->wasm_stack_size = stack_size;
+    exec_env->wasm_stack_p = cheri_stack;
 #else
     exec_env->wasm_stack_size = stack_size;
     exec_env->wasm_stack.s.top_boundary =
@@ -189,16 +204,16 @@ void
 wasm_exec_env_destroy(WASMExecEnv *exec_env)
 {
 #if WASM_ENABLE_THREAD_MGR != 0
-    /* Terminate all sub-threads */
+    /* Wait for all sub-threads */
     WASMCluster *cluster = wasm_exec_env_get_cluster(exec_env);
     if (cluster) {
-        wasm_cluster_terminate_all_except_self(cluster, exec_env);
+        wasm_cluster_wait_for_all_except_self(cluster, exec_env);
 #if WASM_ENABLE_DEBUG_INTERP != 0
         /* Must fire exit event after other threads exits, otherwise
            the stopped thread will be overrided by other threads */
         wasm_cluster_thread_exited(exec_env);
 #endif
-        /* We have terminated other threads, this is the only alive thread, so
+        /* We have waited for other threads, this is the only alive thread, so
          * we don't acquire cluster->lock because the cluster will be destroyed
          * inside this function */
         wasm_cluster_del_exec_env(cluster, exec_env);
@@ -225,10 +240,17 @@ void
 wasm_exec_env_set_thread_info(WASMExecEnv *exec_env)
 {
     uint8 *stack_boundary = os_thread_get_stack_boundary();
+
+#if WASM_ENABLE_THREAD_MGR != 0
+    os_mutex_lock(&exec_env->wait_lock);
+#endif
     exec_env->handle = os_self_thread();
     exec_env->native_stack_boundary =
         stack_boundary ? stack_boundary + WASM_STACK_GUARD_SIZE : NULL;
     exec_env->native_stack_top_min = (void *)UINTPTR_MAX;
+#if WASM_ENABLE_THREAD_MGR != 0
+    os_mutex_unlock(&exec_env->wait_lock);
+#endif
 }
 
 #if WASM_ENABLE_THREAD_MGR != 0

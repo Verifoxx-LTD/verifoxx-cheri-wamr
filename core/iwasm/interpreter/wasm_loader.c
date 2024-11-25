@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "wasm_loader.h"
 #include "bh_common.h"
 #include "bh_log.h"
@@ -21,6 +25,7 @@
 #if WASM_ENABLE_JIT != 0
 #include "../compilation/aot_llvm.h"
 #endif
+
 
 /* Read a value of given type from the address pointed to by the given
    pointer and increase the pointer to the position just after the
@@ -3182,6 +3187,11 @@ orcjit_thread_callback(void *arg)
             return NULL;
         }
     }
+#if WASM_ENABLE_JIT != 0 && WASM_ENABLE_LAZY_JIT != 0
+    os_mutex_lock(&module->tierup_wait_lock);
+    module->fast_jit_ready_groups++;
+    os_mutex_unlock(&module->tierup_wait_lock);
+#endif
 #endif
 
 #if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
@@ -3209,9 +3219,11 @@ orcjit_thread_callback(void *arg)
         }
     }
 
-    /* Wait until init_llvm_jit_functions_stage2 finishes */
+    /* Wait until init_llvm_jit_functions_stage2 finishes and all
+       fast jit functions are compiled */
     os_mutex_lock(&module->tierup_wait_lock);
-    while (!(module->llvm_jit_inited && module->enable_llvm_jit_compilation)) {
+    while (!(module->llvm_jit_inited && module->enable_llvm_jit_compilation
+             && module->fast_jit_ready_groups >= group_stride)) {
         os_cond_reltimedwait(&module->tierup_wait_cond,
                              &module->tierup_wait_lock, 10000);
         if (module->orcjit_stop_compiling) {
@@ -3864,8 +3876,8 @@ create_module(char *error_buf, uint32 error_buf_size)
     bh_assert(ret == BH_LIST_SUCCESS);
 #endif
 
-#if WASM_ENABLE_DEBUG_INTERP != 0                    \
-    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT \
+#if WASM_ENABLE_DEBUG_INTERP != 0                         \
+    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
         && WASM_ENABLE_LAZY_JIT != 0)
     if (os_mutex_init(&module->instance_list_lock) != 0) {
         set_error_buf(error_buf, error_buf_size,
@@ -4195,7 +4207,20 @@ check_wasi_abi_compatibility(const WASMModule *module,
 
     memory = wasm_loader_find_export(module, "", "memory", EXPORT_KIND_MEMORY,
                                      error_buf, error_buf_size);
-    if (!memory) {
+    if (!memory
+#if WASM_ENABLE_LIB_WASI_THREADS != 0
+        /*
+         * with wasi-threads, it's still an open question if a memory
+         * should be exported.
+         *
+         * https://github.com/WebAssembly/wasi-threads/issues/22
+         * https://github.com/WebAssembly/WASI/issues/502
+         *
+         * Note: this code assumes the number of memories is at most 1.
+         */
+        && module->import_memory_count == 0
+#endif
+    ) {
         set_error_buf(error_buf, error_buf_size,
                       "a module with WASI apis must export memory by default");
         return false;
@@ -4212,6 +4237,10 @@ wasm_loader_load(uint8 *buf, uint32 size,
 #endif
                  char *error_buf, uint32 error_buf_size)
 {
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    uint64 perf_module_load_start_time = os_time_get_boot_microsecond();
+#endif
+
     WASMModule *module = create_module(error_buf, error_buf_size);
     if (!module) {
         return NULL;
@@ -4237,6 +4266,10 @@ wasm_loader_load(uint8 *buf, uint32 size,
     }
 #endif
 
+#if WASM_ENABLE_CHERI_PERF_PROFILING != 0
+    module->perf_module_load_time = os_time_get_boot_microsecond() - perf_module_load_start_time;
+#endif
+
     LOG_VERBOSE("Load module success.\n");
     return module;
 
@@ -4253,7 +4286,8 @@ wasm_loader_unload(WASMModule *module)
     if (!module)
         return;
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     module->orcjit_stop_compiling = true;
     if (module->llvm_jit_init_thread)
         os_thread_join(module->llvm_jit_init_thread, NULL);
@@ -4274,7 +4308,8 @@ wasm_loader_unload(WASMModule *module)
         aot_destroy_comp_data(module->comp_data);
 #endif
 
-#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT && WASM_ENABLE_LAZY_JIT != 0
+#if WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
+    && WASM_ENABLE_LAZY_JIT != 0
     if (module->tierup_wait_lock_inited) {
         os_mutex_destroy(&module->tierup_wait_lock);
         os_cond_destroy(&module->tierup_wait_cond);
@@ -4403,8 +4438,8 @@ wasm_loader_unload(WASMModule *module)
     }
 #endif
 
-#if WASM_ENABLE_DEBUG_INTERP != 0                    \
-    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT \
+#if WASM_ENABLE_DEBUG_INTERP != 0                         \
+    || (WASM_ENABLE_FAST_JIT != 0 && WASM_ENABLE_JIT != 0 \
         && WASM_ENABLE_LAZY_JIT != 0)
     os_mutex_destroy(&module->instance_list_lock);
 #endif
@@ -5040,7 +5075,7 @@ fail:
 typedef struct BranchBlockPatch {
     struct BranchBlockPatch *next;
     uint8 patch_type;
-    uint8 *code_compiled;
+    uint8* code_compiled __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
 } BranchBlockPatch;
 #endif
 
@@ -5069,7 +5104,7 @@ typedef struct BranchBlock {
 #ifdef __CHERI__
 } BranchBlock __attribute__((aligned));
 #else
-} BranchBlock __attribute__((align(__BIGGEST_ALIGNMENT__)));
+} BranchBlock;
 #endif
 
 typedef struct WASMLoaderContext {
@@ -5787,6 +5822,21 @@ wasm_loader_emit_uint8(WASMLoaderContext *ctx, uint8 value)
     }
 }
 
+#if ENABLE_CHERI_PURECAP
+// Need to align before store pointer on CHERI pure-cap
+static void
+wasm_loader_emit_ptr(WASMLoaderContext* ctx, void* value)
+{
+    // As we don't know the actual size, due to alignment, allow space for 2 x capability pointer
+    if (ctx->p_code_compiled) {
+        STORE_PTR(ctx->p_code_compiled, value);
+        ctx->p_code_compiled += (size_t)CHERI_POINTER_STORAGE_SIZE;
+    }
+    else {
+        increase_compiled_code_space(ctx, (size_t)CHERI_POINTER_STORAGE_SIZE);
+    }
+}
+#else
 static void
 wasm_loader_emit_ptr(WASMLoaderContext *ctx, void *value)
 {
@@ -5804,6 +5854,8 @@ wasm_loader_emit_ptr(WASMLoaderContext *ctx, void *value)
         increase_compiled_code_space(ctx, sizeof(void *));
     }
 }
+#endif
+
 
 static void
 wasm_loader_emit_backspace(WASMLoaderContext *ctx, uint32 size)
@@ -5954,7 +6006,14 @@ apply_label_patch(WASMLoaderContext *ctx, uint8 depth, uint8 patch_type)
     while (node) {
         node_next = node->next;
         if (node->patch_type == patch_type) {
+
+            // node->code_compiled is the address that needs the patch
+            // ctx->p_code_compiled is value to patch
+
+            // NOTE: For CHERI Purecap architectures, the instruction address to patch
+            // was provided with CHERI_POINTER_STORAGE_SIZE free bytes, so STORE_PTR will first align
             STORE_PTR(node->code_compiled, ctx->p_code_compiled);
+
             if (node_prev == NULL) {
                 frame_csp->patch_list = node_next;
             }
@@ -8204,12 +8263,13 @@ re_scan:
                     goto fail;
                 }
 
-                if (func_idx == cur_func_idx + module->import_function_count) {
+                /* Refer to a forward-declared function */
+                if (func_idx >= cur_func_idx + module->import_function_count) {
                     WASMTableSeg *table_seg = module->table_segments;
                     bool func_declared = false;
                     uint32 j;
 
-                    /* Check whether current function is declared */
+                    /* Check whether the function is declared in table segs */
                     for (i = 0; i < module->table_seg_count; i++, table_seg++) {
                         if (table_seg->elem_type == VALUE_TYPE_FUNCREF
                             && wasm_elem_is_declarative(table_seg->mode)) {
@@ -8221,6 +8281,17 @@ re_scan:
                             }
                         }
                     }
+                    if (!func_declared) {
+                        /* Check whether the function is exported */
+                        for (i = 0; i < module->export_count; i++) {
+                            if (module->exports[i].kind == EXPORT_KIND_FUNC
+                                && module->exports[i].index == func_idx) {
+                                func_declared = true;
+                                break;
+                            }
+                        }
+                    }
+
                     if (!func_declared) {
                         set_error_buf(error_buf, error_buf_size,
                                       "undeclared function reference");

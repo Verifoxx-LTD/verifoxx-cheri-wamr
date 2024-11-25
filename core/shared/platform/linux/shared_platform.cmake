@@ -5,6 +5,14 @@ set (PLATFORM_SHARED_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 add_definitions(-DBH_PLATFORM_LINUX)
 
+# Make it possible to build any Linux build when
+# wamrc was built to have CHERI large pointer alignments
+if (DEFINED WAMR_BUILD_AOT_CHERI_PTR AND WAMR_BUILD_AOT_CHERI_PTR GREATER 0)
+    # Force use of CHERI pointer with given alignment
+    add_compile_definitions(AOT_CHERI_PTR_SIZE=${WAMR_BUILD_AOT_CHERI_PTR})
+endif ()
+
+
 include_directories(${PLATFORM_SHARED_DIR})
 include_directories(${PLATFORM_SHARED_DIR}/../include)
 

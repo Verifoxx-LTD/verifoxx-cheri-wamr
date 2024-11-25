@@ -1240,6 +1240,8 @@ aot_compile_func(AOTCompContext *comp_ctx, uint32 func_index)
                     case WASM_OP_ATOMIC_FENCE:
                         /* Skip memory index */
                         frame_ip++;
+                        if (!aot_compiler_op_atomic_fence(comp_ctx, func_ctx))
+                            return false;
                         break;
                     case WASM_OP_ATOMIC_I32_LOAD:
                         bytes = 4;
@@ -2761,6 +2763,15 @@ aot_compile_wasm(AOTCompContext *comp_ctx)
         }
     }
 
+    // If the generated target has a pointer size different to the pointer size
+    // specified in AOT_CHERI_PTR_SIZE, then warn the user
+#if AOT_CHERI_PTR_SIZE
+    if ((unsigned)AOT_CHERI_PTR_SIZE != comp_ctx->pointer_size)
+    {
+        LOG_WARNING("\n** WARNING ** : Target CPU pointer size differs from the size used in compiling WASM.\n"
+                    "\t - Consider building WAMR with AOT_CHERI_PTR_SIZE=%d\n", AOT_CHERI_PTR_SIZE);
+    }
+#endif
     return true;
 }
 

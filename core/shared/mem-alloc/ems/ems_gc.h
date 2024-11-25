@@ -19,12 +19,6 @@
 extern "C" {
 #endif
 
-#if ENABLE_CHERI_PURECAP
-#define GC_HEAD_PADDING 16  // Preserve alignment
-#else
-#define GC_HEAD_PADDING 4
-#endif
-
 #define NULL_REF ((gc_object_t)NULL)
 
 #define GC_SUCCESS (0)
@@ -51,6 +45,32 @@ typedef enum {
     GC_STAT_FREE,
     GC_STAT_HIGHMARK,
 } GC_STAT_INDEX;
+
+
+/******************************
+ * Each HMU begins with the header, the actual pointer to the 
+ * alloc'd memory is after this structure.
+ * On CHERI platforms this must be aligned because pointers are aligned to 128-bits.
+ *******************************/
+typedef struct hmu_struct {
+#ifdef __CHERI__
+    gc_uint32 header __attribute__((aligned(__BIGGEST_ALIGNMENT__)));
+#else
+    gc_uint32 header;
+#endif
+} hmu_t;
+
+#ifdef __CHERI__
+#define GC_ALIGN(s) ((uint32_t)cheri_align_up( (s), __BIGGEST_ALIGNMENT__ ))
+#define GC_ALIGNMENT_SIZE   ((size_t)__BIGGEST_ALIGNMENT__)
+#else
+#define GC_ALIGN(s) (((uint32)(s) + 7) & (uint32)~7)
+#define GC_ALIGNMENT_SIZE   ((size_t)8)
+#endif
+#define GC_ALIGNMENT_SIZE_MASK  ((size_t)(GC_ALIGNMENT_SIZE-1U))
+
+#define GC_HEAD_PADDING (sizeof(hmu_t))
+
 
 /**
  * GC initialization from a buffer, which is separated into

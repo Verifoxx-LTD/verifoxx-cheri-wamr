@@ -194,7 +194,7 @@ runtime_signal_handler(void *sig_addr)
         else if (exec_env_tls->exce_check_guard_page <= (uint8 *)sig_addr
                  && (uint8 *)sig_addr
                         < exec_env_tls->exce_check_guard_page + page_size) {
-            bh_assert(wasm_get_exception(module_inst));
+            bh_assert(wasm_copy_exception(module_inst, NULL));
             os_longjmp(jmpbuf_node->jmpbuf, 1);
         }
     }
@@ -250,7 +250,7 @@ runtime_exception_handler(EXCEPTION_POINTERS *exce_info)
             else if (exec_env_tls->exce_check_guard_page <= (uint8 *)sig_addr
                      && (uint8 *)sig_addr
                             < exec_env_tls->exce_check_guard_page + page_size) {
-                bh_assert(wasm_get_exception(module_inst));
+                bh_assert(wasm_copy_exception(module_inst, NULL));
                 if (module_inst->module_type == Wasm_Module_Bytecode) {
                     return EXCEPTION_CONTINUE_SEARCH;
                 }
@@ -1206,20 +1206,21 @@ wasm_runtime_unload(WASMModuleCommon *module)
 
 WASMModuleInstanceCommon *
 wasm_runtime_instantiate_internal(WASMModuleCommon *module, bool is_sub_inst,
-                                  uint32 stack_size, uint32 heap_size,
-                                  char *error_buf, uint32 error_buf_size)
+                                  WASMExecEnv *exec_env_main, uint32 stack_size,
+                                  uint32 heap_size, char *error_buf,
+                                  uint32 error_buf_size)
 {
 #if WASM_ENABLE_INTERP != 0
     if (module->module_type == Wasm_Module_Bytecode)
         return (WASMModuleInstanceCommon *)wasm_instantiate(
-            (WASMModule *)module, is_sub_inst, stack_size, heap_size, error_buf,
-            error_buf_size);
+            (WASMModule *)module, is_sub_inst, exec_env_main, stack_size,
+            heap_size, error_buf, error_buf_size);
 #endif
 #if WASM_ENABLE_AOT != 0
     if (module->module_type == Wasm_Module_AoT)
         return (WASMModuleInstanceCommon *)aot_instantiate(
-            (AOTModule *)module, is_sub_inst, stack_size, heap_size, error_buf,
-            error_buf_size);
+            (AOTModule *)module, is_sub_inst, exec_env_main, stack_size,
+            heap_size, error_buf, error_buf_size);
 #endif
     set_error_buf(error_buf, error_buf_size,
                   "Instantiate module failed, invalid module type");
@@ -1232,7 +1233,7 @@ wasm_runtime_instantiate(WASMModuleCommon *module, uint32 stack_size,
                          uint32 error_buf_size)
 {
     return wasm_runtime_instantiate_internal(
-        module, false, stack_size, heap_size, error_buf, error_buf_size);
+        module, false, NULL, stack_size, heap_size, error_buf, error_buf_size);
 }
 
 void
@@ -1431,12 +1432,21 @@ wasm_runtime_dump_module_inst_mem_consumption(
 void
 wasm_runtime_dump_exec_env_mem_consumption(const WASMExecEnv *exec_env)
 {
+#ifdef __CHERI__
+    uint32 total_size = sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+        + exec_env->wasm_stack_size;
+#else
     uint32 total_size =
         offsetof(WASMExecEnv, wasm_stack.s.bottom) + exec_env->wasm_stack_size;
-
+#endif
     os_printf("Exec env memory consumption, total size: %u\n", total_size);
     os_printf("    exec env struct size: %u\n",
+#ifdef __CHERI__
+              sizeof(WASMExecEnv));
+#else
               offsetof(WASMExecEnv, wasm_stack.s.bottom));
+#endif
+
 #if WASM_ENABLE_INTERP != 0 && WASM_ENABLE_FAST_INTERP == 0
     os_printf("        block addr cache size: %u\n",
               sizeof(exec_env->block_addr_cache));
@@ -1471,6 +1481,7 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         wasm_get_module_inst_mem_consumption(wasm_module_inst,
                                              &module_inst_mem_consps);
         wasm_get_module_mem_consumption(wasm_module, &module_mem_consps);
+
         if (wasm_module_inst->module->aux_stack_top_global_index != (uint32)-1)
             max_aux_stack_used = wasm_module_inst->e->max_aux_stack_used;
     }
@@ -1497,7 +1508,12 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
         app_heap_peak_size = gc_get_heap_highmark_size(heap_handle);
     }
 
-    total_size = offsetof(WASMExecEnv, wasm_stack.s.bottom)
+    total_size = 
+#ifdef __CHERI__
+                sizeof(WASMExecEnv) + sizeof(WASMCheriStack_t)
+#else
+                offsetof(WASMExecEnv, wasm_stack.s.bottom)
+#endif
                  + exec_env->wasm_stack_size + module_mem_consps.total_size
                  + module_inst_mem_consps.total_size;
 
@@ -1508,6 +1524,7 @@ wasm_runtime_dump_mem_consumption(WASMExecEnv *exec_env)
     os_printf("\nTotal memory consumption of module, module inst and "
               "exec env: %u\n",
               total_size);
+
     os_printf("Total interpreter stack used: %u\n",
               exec_env->max_wasm_stack_used);
 
@@ -1776,8 +1793,26 @@ wasm_runtime_prepare_call_function(WASMExecEnv *exec_env,
                 void *externref_obj;
                 uint32 externref_index;
 
+#if ENABLE_CHERI_PURECAP
+                /* On CHERI, pointers are aligned to a 16 byte boundary and the caller will have
+                   allocated enough space to allow for max alignment, i.e fixed space of 2 x sizeof(uintptr_t).
+                 */
+                externref_obj = wasm_cheri_read_externref_from_array(argv, &argv_i);    // Will advance argv_i
+
+                if (!wasm_externref_obj2ref(exec_env->module_inst,
+                    externref_obj, &externref_index)) {
+                    wasm_runtime_free(new_argv);
+                    return false;
+                }
+
+                new_argv[new_argv_i] = externref_index;
+                new_argv_i++;
+
+#else   /* ! ENABLE_CHERI_PURECAP */
+
 #if UINTPTR_MAX == UINT32_MAX
                 externref_obj = (void *)argv[argv_i];
+
 #else
                 union {
                     uintptr_t val;
@@ -1797,6 +1832,9 @@ wasm_runtime_prepare_call_function(WASMExecEnv *exec_env,
                 new_argv[new_argv_i] = externref_index;
                 argv_i += sizeof(uintptr_t) / sizeof(uint32);
                 new_argv_i++;
+
+#endif  /* ENABLE_CHERI_PURECAP */
+
             }
             else {
                 uint16 param_cell_num = wasm_value_type_cell_num(param_type);
@@ -1839,6 +1877,19 @@ wasm_runtime_finalize_call_function(WASMExecEnv *exec_env,
         uint8 result_type = func_type->types[func_type->param_count + result_i];
         if (result_type == VALUE_TYPE_EXTERNREF) {
             void *externref_obj;
+#if ENABLE_CHERI_PURECAP
+
+            if (!wasm_externref_ref2obj(argv[argv_i], &externref_obj)) {
+                wasm_runtime_free(argv);
+                return false;
+            }
+
+            // Write externref and update ret_argv_i to point to next element
+            wasm_cheri_write_externref_to_array(externref_obj, ret_argv, &ret_argv_i);
+
+            argv_i += 1;
+
+#else /* ! ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX != UINT32_MAX
             union {
                 uintptr_t val;
@@ -1860,6 +1911,8 @@ wasm_runtime_finalize_call_function(WASMExecEnv *exec_env,
 #endif
             argv_i += 1;
             ret_argv_i += sizeof(uintptr_t) / sizeof(uint32);
+#endif /* ENABLE_CHERI_PURECAP */
+
         }
         else {
             uint16 result_cell_num = wasm_value_type_cell_num(result_type);
@@ -1880,18 +1933,21 @@ static bool
 clear_wasi_proc_exit_exception(WASMModuleInstanceCommon *module_inst_comm)
 {
 #if WASM_ENABLE_LIBC_WASI != 0
-    const char *exception;
+    bool has_exception;
+    char exception[EXCEPTION_BUF_LEN];
     WASMModuleInstance *module_inst = (WASMModuleInstance *)module_inst_comm;
 
     bh_assert(module_inst_comm->module_type == Wasm_Module_Bytecode
               || module_inst_comm->module_type == Wasm_Module_AoT);
 
-    exception = wasm_get_exception(module_inst);
-    if (exception && !strcmp(exception, "Exception: wasi proc exit")) {
+    has_exception = wasm_copy_exception(module_inst, exception);
+    if (has_exception && !strcmp(exception, "Exception: wasi proc exit")) {
         /* The "wasi proc exit" exception is thrown by native lib to
            let wasm app exit, which is a normal behavior, we clear
-           the exception here. */
-        wasm_set_exception(module_inst, NULL);
+           the exception here. And just clear the exception of current
+           thread, don't call `wasm_set_exception(module_inst, NULL)`
+           which will clear the exception of all threads. */
+        module_inst->cur_exception[0] = '\0';
         return true;
     }
     return false;
@@ -2013,6 +2069,13 @@ parse_args_to_uint32_array(WASMType *type, wasm_val_t *args, uint32 *out_argv)
             }
             case WASM_ANYREF:
             {
+#if ENABLE_CHERI_PURECAP
+                uintptr_t externref = args[i].of.foreign;
+
+                // Write and advance p as required
+                wasm_cheri_write_externref_to_array(externref, out_argv, &p);
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 out_argv[p++] = args[i].of.foreign;
 #else
@@ -2025,6 +2088,7 @@ parse_args_to_uint32_array(WASMType *type, wasm_val_t *args, uint32 *out_argv)
                 out_argv[p++] = u.parts[0];
                 out_argv[p++] = u.parts[1];
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
                 break;
             }
 #endif
@@ -2091,6 +2155,14 @@ parse_uint32_array_to_results(WASMType *type, uint32 *argv,
             }
             case VALUE_TYPE_EXTERNREF:
             {
+
+#if ENABLE_CHERI_PURECAP
+                // Read externref and advance p to next entry
+                uintptr_t externref = wasm_cheri_read_externref_from_array(argv, &p);
+                out_results[i].kind = WASM_ANYREF;
+                out_results[i].of.foreign = externref;
+
+#else /* !ENABLE_CHERI_PURECAP */
 #if UINTPTR_MAX == UINT32_MAX
                 out_results[i].kind = WASM_ANYREF;
                 out_results[i].of.foreign = (uintptr_t)argv[p++];
@@ -2104,9 +2176,11 @@ parse_uint32_array_to_results(WASMType *type, uint32 *argv,
                 out_results[i].kind = WASM_ANYREF;
                 out_results[i].of.foreign = u.val;
 #endif
+#endif /* ENABLE_CHERI_PURECAP */
                 break;
             }
 #endif
+
             default:
                 bh_assert(0);
                 break;
@@ -2314,6 +2388,12 @@ wasm_set_exception(WASMModuleInstance *module_inst, const char *exception)
 {
     WASMExecEnv *exec_env = NULL;
 
+#if WASM_ENABLE_SHARED_MEMORY != 0
+    WASMSharedMemNode *node =
+        wasm_module_get_shared_memory((WASMModuleCommon *)module_inst->module);
+    if (node)
+        os_mutex_lock(&node->shared_mem_lock);
+#endif
     if (exception) {
         snprintf(module_inst->cur_exception, sizeof(module_inst->cur_exception),
                  "Exception: %s", exception);
@@ -2321,6 +2401,10 @@ wasm_set_exception(WASMModuleInstance *module_inst, const char *exception)
     else {
         module_inst->cur_exception[0] = '\0';
     }
+#if WASM_ENABLE_SHARED_MEMORY != 0
+    if (node)
+        os_mutex_unlock(&node->shared_mem_lock);
+#endif
 
 #if WASM_ENABLE_THREAD_MGR != 0
     exec_env =
@@ -2328,12 +2412,6 @@ wasm_set_exception(WASMModuleInstance *module_inst, const char *exception)
     if (exec_env) {
         wasm_cluster_spread_exception(exec_env, exception ? false : true);
     }
-#if WASM_ENABLE_SHARED_MEMORY
-    if (exception) {
-        notify_stale_threads_on_exception(
-            (WASMModuleInstanceCommon *)module_inst);
-    }
-#endif
 #else
     (void)exec_env;
 #endif
@@ -2381,6 +2459,36 @@ wasm_get_exception(WASMModuleInstance *module_inst)
         return module_inst->cur_exception;
 }
 
+bool
+wasm_copy_exception(WASMModuleInstance *module_inst, char *exception_buf)
+{
+    bool has_exception = false;
+
+#if WASM_ENABLE_SHARED_MEMORY != 0
+    WASMSharedMemNode *node =
+        wasm_module_get_shared_memory((WASMModuleCommon *)module_inst->module);
+    if (node)
+        os_mutex_lock(&node->shared_mem_lock);
+#endif
+    if (module_inst->cur_exception[0] != '\0') {
+        /* NULL is passed if the caller is not interested in getting the
+         * exception content, but only in knowing if an exception has been
+         * raised
+         */
+        if (exception_buf != NULL)
+            bh_memcpy_s(exception_buf, sizeof(module_inst->cur_exception),
+                        module_inst->cur_exception,
+                        sizeof(module_inst->cur_exception));
+        has_exception = true;
+    }
+#if WASM_ENABLE_SHARED_MEMORY != 0
+    if (node)
+        os_mutex_unlock(&node->shared_mem_lock);
+#endif
+
+    return has_exception;
+}
+
 void
 wasm_runtime_set_exception(WASMModuleInstanceCommon *module_inst_comm,
                            const char *exception)
@@ -2400,6 +2508,17 @@ wasm_runtime_get_exception(WASMModuleInstanceCommon *module_inst_comm)
     bh_assert(module_inst_comm->module_type == Wasm_Module_Bytecode
               || module_inst_comm->module_type == Wasm_Module_AoT);
     return wasm_get_exception(module_inst);
+}
+
+bool
+wasm_runtime_copy_exception(WASMModuleInstanceCommon *module_inst_comm,
+                            char *exception_buf)
+{
+    WASMModuleInstance *module_inst = (WASMModuleInstance *)module_inst_comm;
+
+    bh_assert(module_inst_comm->module_type == Wasm_Module_Bytecode
+              || module_inst_comm->module_type == Wasm_Module_AoT);
+    return wasm_copy_exception(module_inst, exception_buf);
 }
 
 void
@@ -2440,6 +2559,62 @@ wasm_runtime_get_custom_data(WASMModuleInstanceCommon *module_inst_comm)
     bh_assert(module_inst_comm->module_type == Wasm_Module_Bytecode
               || module_inst_comm->module_type == Wasm_Module_AoT);
     return module_inst->custom_data;
+}
+
+uint32
+wasm_runtime_module_malloc_internal(WASMModuleInstanceCommon *module_inst,
+                                    WASMExecEnv *exec_env, uint32 size,
+                                    void **p_native_addr)
+{
+#if WASM_ENABLE_INTERP != 0
+    if (module_inst->module_type == Wasm_Module_Bytecode)
+        return wasm_module_malloc_internal((WASMModuleInstance *)module_inst,
+                                           exec_env, size, p_native_addr);
+#endif
+#if WASM_ENABLE_AOT != 0
+    if (module_inst->module_type == Wasm_Module_AoT)
+        return aot_module_malloc_internal((AOTModuleInstance *)module_inst,
+                                          exec_env, size, p_native_addr);
+#endif
+    return 0;
+}
+
+uint32
+wasm_runtime_module_realloc_internal(WASMModuleInstanceCommon *module_inst,
+                                     WASMExecEnv *exec_env, uint32 ptr,
+                                     uint32 size, void **p_native_addr)
+{
+#if WASM_ENABLE_INTERP != 0
+    if (module_inst->module_type == Wasm_Module_Bytecode)
+        return wasm_module_realloc_internal((WASMModuleInstance *)module_inst,
+                                            exec_env, ptr, size, p_native_addr);
+#endif
+#if WASM_ENABLE_AOT != 0
+    if (module_inst->module_type == Wasm_Module_AoT)
+        return aot_module_realloc_internal((AOTModuleInstance *)module_inst,
+                                           exec_env, ptr, size, p_native_addr);
+#endif
+    return 0;
+}
+
+void
+wasm_runtime_module_free_internal(WASMModuleInstanceCommon *module_inst,
+                                  WASMExecEnv *exec_env, uint32 ptr)
+{
+#if WASM_ENABLE_INTERP != 0
+    if (module_inst->module_type == Wasm_Module_Bytecode) {
+        wasm_module_free_internal((WASMModuleInstance *)module_inst, exec_env,
+                                  ptr);
+        return;
+    }
+#endif
+#if WASM_ENABLE_AOT != 0
+    if (module_inst->module_type == Wasm_Module_AoT) {
+        aot_module_free_internal((AOTModuleInstance *)module_inst, exec_env,
+                                 ptr);
+        return;
+    }
+#endif
 }
 
 uint32
@@ -3100,6 +3275,21 @@ uint32_t
 wasm_runtime_get_wasi_exit_code(WASMModuleInstanceCommon *module_inst)
 {
     WASIContext *wasi_ctx = wasm_runtime_get_wasi_ctx(module_inst);
+#if WASM_ENABLE_THREAD_MGR != 0
+    WASMCluster *cluster;
+    WASMExecEnv *exec_env;
+
+    exec_env = wasm_runtime_get_exec_env_singleton(module_inst);
+    if (exec_env && (cluster = wasm_exec_env_get_cluster(exec_env))) {
+        /**
+         * The main thread may exit earlier than other threads, and
+         * the exit_code of wasi_ctx may be changed by other thread
+         * when it runs into wasi_proc_exit, here we wait until all
+         * other threads exit to avoid getting invalid exit_code.
+         */
+        wasm_cluster_wait_for_all_except_self(cluster, exec_env);
+    }
+#endif
     return wasi_ctx->exit_code;
 }
 
@@ -3325,7 +3515,7 @@ wasm_runtime_invoke_native_raw(WASMExecEnv *exec_env, void *func_ptr,
         }
     }
 
-    ret = !wasm_runtime_get_exception(module) ? true : false;
+    ret = !wasm_runtime_copy_exception(module, NULL);
 
 fail:
     if (argv1 != argv_buf)
@@ -3800,7 +3990,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     }
     exec_env->attachment = NULL;
 
-    ret = !wasm_runtime_get_exception(module) ? true : false;
+    ret = !wasm_runtime_copy_exception(module, NULL);
 
 fail:
     if (argv1 != argv_buf)
@@ -4014,7 +4204,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     }
     exec_env->attachment = NULL;
 
-    ret = !wasm_runtime_get_exception(module) ? true : false;
+    ret = !wasm_runtime_copy_exception(module, NULL);
 
 fail:
     if (argv1 != argv_buf)
@@ -4065,12 +4255,18 @@ typedef void (*GenericFunctionPointer)();
 void
 invokeNative(GenericFunctionPointer f, uint64 *args, uint64 n_stacks);
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
 typedef float64 (*Float64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef float32 (*Float32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef int64 (*Int64FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef int32 (*Int32FuncPtr)(GenericFunctionPointer, uint8 *, uint64);
 typedef void (*VoidFuncPtr)(GenericFunctionPointer, uint8 *, uint64);
+
+// PtrFuncPtr CHERI only
+typedef void* (*PtrFuncPtr)(GenericFunctionPointer, uint8*, uint64);
+static volatile PtrFuncPtr invokeNative_Ptr =
+(PtrFuncPtr)(uintptr_t)invokeNative;
+
 #else
 typedef float64(*Float64FuncPtr)(GenericFunctionPointer, uint64*, uint64);
 typedef float32(*Float32FuncPtr)(GenericFunctionPointer, uint64*, uint64);
@@ -4102,7 +4298,11 @@ static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
 #define MAX_REG_FLOATS 8
 #if defined(BUILD_TARGET_AARCH64) || defined(BUILD_TARGET_RISCV64_LP64D) \
     || defined(BUILD_TARGET_RISCV64_LP64)
+#if ENABLE_CHERI_PURECAP
+#define MAX_REG_INTS 7  /* For CHERI PureCap, first argument in reg c0 is the exec env */
+#else
 #define MAX_REG_INTS 8
+#endif
 #else
 #define MAX_REG_INTS 6
 #endif /* end of defined(BUILD_TARGET_AARCH64)   \
@@ -4189,11 +4389,11 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            uint32 *argv_ret)
 {
     // The args structure is different than other targets for CHERI...
-    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 8), following given in bytes:
-    // argv[0..15]     : CPtr exec_env (128-bit)
+    // Structures for CHERI defined as follows (note that MAX_REG_FLOATS == 8 and MAX_REG_INTS == 7), following given in bytes:
+    // argv[0..15]     : CPtr exec_env (128-bit)    => c0
     // argv[16..79]    : fps (x8)
-    // argv[80..207]   : ints (x8)
-    // argv[208..463]  : stack args (x16 max) *could* be a capability pointer
+    // argv[80..191]   : ints (x7)  => c1..c7
+    // argv[192..448]  : stack args (x16 max) *could* be a capability pointer
 
     // Copying stack arguments on Morello:
     // This is complex.  All arguments are stored on the stack as 64-bit apart from capabilities which are 128-bit.
@@ -4333,15 +4533,12 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                 break;
 
 #if WASM_ENABLE_REF_TYPES != 0
-#error "WASM_ENABLE_REF_TYPES not yet supported on CHERI"
             case VALUE_TYPE_EXTERNREF:
             {
                 uint32 externref_idx = *argv_src++;
                 if (is_aot_func) {
-                    if (n_ints < MAX_REG_INTS)
-                        ints[n_ints++] = externref_idx;
-                    else
-                        stacks[n_stacks++] = externref_idx;
+                    // Just an index - so thats an i32 which we treat as a 64-bit on CHERI
+                    update_args_as_int64((uint64)externref_idx, ints, stacks, &n_ints, &stack_bytes_used);
                 }
                 else {
                     void *externref_obj;
@@ -4349,10 +4546,9 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                     if (!wasm_externref_ref2obj(externref_idx, &externref_obj))
                         goto fail;
 
-                    if (n_ints < MAX_REG_INTS)
-                        ints[n_ints++] = (uintptr_t)externref_obj;
-                    else
-                        stacks[n_stacks++] = (uintptr_t)externref_obj;
+                    // Capability is effectively a pointer, and must be treated as a
+                    // full pointer (i.e double machine word) on CHERI
+                    update_args_as_pointer((uintptr_t)externref_obj, ints, stacks, &n_ints, &stack_bytes_used);
                 }
                 break;
             }
@@ -4369,6 +4565,8 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
         update_args_as_pointer(arg_i64, ints, stacks, &n_ints, &stack_bytes_used);
         argv_src += 4;
     }
+
+    // Note: Align up stack bytes not needed as the ASM code will do this for us
 
     exec_env->attachment = attachment;
     if (result_count == 0) {
@@ -4400,12 +4598,14 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
             case VALUE_TYPE_EXTERNREF:
             {
                 if (is_aot_func) {
-                    argv_ret[0] = invokeNative_Int32(func_ptr, argv1, n_stacks);
+                    // Index which is i32
+                    argv_ret[0] = (uint32)invokeNative_Int32(func_ptr, argv1, stack_bytes_used);
                 }
                 else {
+                    // We return the full externref object, which is (potentially) a full capability
                     uint32 externref_idx;
-                    void *externref_obj = (void *)(uintptr_t)invokeNative_Int64(
-                        func_ptr, argv1, n_stacks);
+                    void *externref_obj = (void *)invokeNative_Ptr(
+                        func_ptr, argv1, stack_bytes_used);
 
                     if (!wasm_externref_obj2ref(exec_env->module_inst,
                                                 externref_obj, &externref_idx))
@@ -4423,7 +4623,7 @@ wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
     }
     exec_env->attachment = NULL;
 
-    ret = !wasm_runtime_get_exception(module) ? true : false;
+    ret = !wasm_runtime_copy_exception(module, NULL);
 fail:
     if (argv1 != argv_buf)
         wasm_runtime_free(argv1);
@@ -4459,7 +4659,7 @@ wasm_runtime_invoke_native(WASMExecEnv* exec_env, void* func_ptr,
 #endif /* end of BUILD_TARGET_RISCV64_LP64 */
     uint64 size;
 
-    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    // Note that on CHERI, n_stacks means BYTES of stack used.
+    uint32* argv_src = argv, i, argc1, n_ints = 0, n_stacks = 0;    
     uint32 arg_i32, ptr_len;
     uint32 result_count = func_type->result_count;
     uint32 ext_ret_count = result_count > 1 ? result_count - 1 : 0;
@@ -4697,7 +4897,7 @@ fail:
                  || defined(BUILD_TARGET_RISCV64_LP64) */
 
 bool
-wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_indices,
+wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_index,
                            uint32 argc, uint32 argv[])
 {
     bool ret = false;
@@ -4713,11 +4913,11 @@ wasm_runtime_call_indirect(WASMExecEnv *exec_env, uint32 element_indices,
 
 #if WASM_ENABLE_INTERP != 0
     if (exec_env->module_inst->module_type == Wasm_Module_Bytecode)
-        ret = wasm_call_indirect(exec_env, 0, element_indices, argc, argv);
+        ret = wasm_call_indirect(exec_env, 0, element_index, argc, argv);
 #endif
 #if WASM_ENABLE_AOT != 0
     if (exec_env->module_inst->module_type == Wasm_Module_AoT)
-        ret = aot_call_indirect(exec_env, 0, element_indices, argc, argv);
+        ret = aot_call_indirect(exec_env, 0, element_index, argc, argv);
 #endif
 
     if (!ret && clear_wasi_proc_exit_exception(exec_env->module_inst)) {
@@ -4862,18 +5062,28 @@ typedef struct ExternRefMapNode {
     bool marked;
 } ExternRefMapNode;
 
+
 static uint32
 wasm_externref_hash(const void *key)
 {
+#if ENABLE_CHERI_PURECAP
+    uint32 externref_idx = (uint32)(ptraddr_t)cheri_address_get(key);
+#else
     uint32 externref_idx = (uint32)(uintptr_t)key;
+#endif
     return externref_idx;
 }
 
 static bool
 wasm_externref_equal(void *key1, void *key2)
 {
+#if ENABLE_CHERI_PURECAP
+    uint32 externref_idx1 = (uint32)(ptraddr_t)cheri_address_get(key1);
+    uint32 externref_idx2 = (uint32)(ptraddr_t)cheri_address_get(key2);
+#else
     uint32 externref_idx1 = (uint32)(uintptr_t)key1;
     uint32 externref_idx2 = (uint32)(uintptr_t)key2;
+#endif
     return externref_idx1 == externref_idx2 ? true : false;
 }
 
@@ -4889,7 +5099,6 @@ wasm_externref_map_init()
         os_mutex_destroy(&externref_lock);
         return false;
     }
-
     externref_global_id = 1;
     return true;
 }
@@ -4934,14 +5143,32 @@ wasm_externref_obj2ref(WASMModuleInstanceCommon *module_inst, void *extern_obj,
      * to catch a parameter from `wasm_application_execute_func`,
      * which represents a string 'null'
      */
-#if UINTPTR_MAX == UINT32_MAX
-    if ((uint32)-1 == (uintptr_t)extern_obj) {
-#else
-    if ((uint64)-1LL == (uintptr_t)extern_obj) {
+
+    /* On CHERI, a "null" must have cleared tag */
+#if ENABLE_CHERI_PURECAP
+    if (!cheri_tag_get(extern_obj))
+    {
 #endif
-        *p_externref_idx = NULL_REF;
-        return true;
+
+#if UINTPTR_MAX == UINT32_MAX
+        if ((uint32)-1 == (uintptr_t)extern_obj) {
+#else
+        if ((uint64)-1LL == (uintptr_t)extern_obj) {
+#endif
+            * p_externref_idx = NULL_REF;
+            return true;
+        }
+#if ENABLE_CHERI_PURECAP
     }
+#endif
+
+    // On CHERI, warn if the externref (capability) is not sealed
+#if ENABLE_CHERI_PURECAP
+    if (cheri_tag_get(extern_obj) && !cheri_is_sealed(extern_obj))
+    {
+        LOG_WARNING("Capability passed to extern ref is not sealed!");
+    }
+#endif
 
     /* in a wrapper, extern_obj could be any value */
     lookup_user_data.node.extern_obj = extern_obj;
@@ -5005,8 +5232,13 @@ wasm_externref_ref2obj(uint32 externref_idx, void **p_extern_obj)
     node = bh_hash_map_find(externref_map, (void *)(uintptr_t)externref_idx);
     os_mutex_unlock(&externref_lock);
 
+
     if (!node)
+    {
+        LOG_WARNING("Entry for externref index %d could not be found in the internal hashmap!", externref_idx);
         return false;
+    }
+        
 
     *p_extern_obj = node->extern_obj;
     return true;
@@ -5704,3 +5936,44 @@ wasm_runtime_is_import_global_linked(const char *module_name,
     return false;
 #endif
 }
+
+#if (WASM_ENABLE_REF_TYPES && ENABLE_CHERI_PURECAP)
+
+uintptr_t wasm_cheri_read_externref_from_array(uint32* array, uint32* offset_ref)
+{
+    // Always align up to pointer, we leave 2 x pointer for space
+    uintptr_t* p_externref = (uintptr_t*)cheri_align_up(&array[*offset_ref], __BIGGEST_ALIGNMENT__);
+    *offset_ref += wasm_cheri_externref_size();
+
+    if (!cheri_tag_get(*p_externref))
+    {
+        LOG_WARNING("Reading externref pointer with invalidated tag!");
+    }
+
+    if (!cheri_is_sealed(*p_externref))
+    {
+        LOG_WARNING("Reading externref pointer which is not sealed!");
+    }
+
+    return *p_externref;
+}
+
+void wasm_cheri_write_externref_to_array(uintptr_t externref, uint32* array, uint32* offset_ref)
+{
+    // Always align up for pointer, we leave 2 x pointer for space
+    uintptr_t* aligned_addr = (uintptr_t*)cheri_align_up(&array[*offset_ref], __BIGGEST_ALIGNMENT__);
+    *offset_ref += wasm_cheri_externref_size();
+
+    if (!cheri_tag_get(externref))
+    {
+        LOG_WARNING("Writing externref pointer with invalidated tag!");
+    }
+
+    if (!cheri_is_sealed(externref))
+    {
+        LOG_WARNING("Writing externref pointer which is not sealed!");
+    }
+
+    *aligned_addr = externref;
+}
+#endif /* ENABLE_CHERI_PURECAP && WASM_ENABLE_REF_TYPES */

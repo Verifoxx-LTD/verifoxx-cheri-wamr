@@ -10,7 +10,11 @@
 /**
  * Operand kinds of instructions.
  */
-enum { JIT_OPND_KIND_Reg, JIT_OPND_KIND_VReg, JIT_OPND_KIND_LookupSwitch };
+enum {
+    JIT_OPND_KIND_Reg,
+    JIT_OPND_KIND_VReg,
+    JIT_OPND_KIND_LookupSwitch,
+};
 
 /**
  * Operand kind of each instruction.
@@ -44,6 +48,18 @@ static const uint8 insn_opnd_first_use[] = {
 #define JIT_INSN_NEW_VReg(OPND_NUM)                     \
     jit_calloc(offsetof(JitInsn, _opnd._opnd_VReg._reg) \
                + sizeof(JitReg) * (OPND_NUM))
+
+JitInsn *
+_jit_insn_new_Reg_0(JitOpcode opc)
+{
+    JitInsn *insn = JIT_INSN_NEW_Reg(0);
+
+    if (insn) {
+        insn->opcode = opc;
+    }
+
+    return insn;
+}
 
 JitInsn *
 _jit_insn_new_Reg_1(JitOpcode opc, JitReg r0)
@@ -560,6 +576,7 @@ address_of_const(JitCompContext *cc, JitReg reg, unsigned size)
     unsigned no = jit_reg_no(reg);
     unsigned idx = no & ~_JIT_REG_CONST_IDX_FLAG;
 
+    bh_assert(kind < JIT_REG_KIND_L32);
     bh_assert(jit_reg_is_const_idx(reg) && idx < cc->_const_val._num[kind]);
 
     return cc->_const_val._value[kind] + size * idx;
@@ -572,6 +589,7 @@ next_of_const(JitCompContext *cc, JitReg reg)
     unsigned no = jit_reg_no(reg);
     unsigned idx = no & ~_JIT_REG_CONST_IDX_FLAG;
 
+    bh_assert(kind < JIT_REG_KIND_L32);
     bh_assert(jit_reg_is_const_idx(reg) && idx < cc->_const_val._num[kind]);
 
     return cc->_const_val._next[kind][idx];

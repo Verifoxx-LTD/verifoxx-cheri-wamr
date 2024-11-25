@@ -1,0 +1,4 @@
+{
+    "dirs": ["fs-tests.dir"],
+    "args": ["fs-tests.dir/test.txt", "fs-tests.dir/test_out.txt"]
+}

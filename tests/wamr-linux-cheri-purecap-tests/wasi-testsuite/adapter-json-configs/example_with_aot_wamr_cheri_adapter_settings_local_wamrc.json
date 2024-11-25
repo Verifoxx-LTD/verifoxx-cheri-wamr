@@ -1,0 +1,13 @@
+{
+	"hostname": "192.168.0.39",
+	"user": "root",
+	"key":  "~//.ssh//id_morello",
+	"dest": "/root/tmp/.wasi-testsuite",
+	"wamr": "/root/tmp/linux-cheri-purecap/iwasm",
+	"wamrc": "/home/bob/wamrc",
+	"wamrc_args": ["--target=aarch64",
+					"--target-abi=musl_purecap",
+					"--cpu=rainier",
+					"--cpu-features=+morello,+c64"
+					]
+}

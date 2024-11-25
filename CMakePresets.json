@@ -12,19 +12,29 @@
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "$env{HOME}/install/${presetName}",
-      "toolchainFile": "toolchain.cmake",
+      "toolchainFile": "llvm_toolchain.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
         "CHERI_PURECAP": "0",
-		    "CHERI_STATIC_BUILD": "1",
-		    "CHERI_COMPILER_FLAGS": "-fpack-struct=16 -mstrict-align",
-		    "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
-		    "WAMR_BUILD_AOT": "0",
-		    "WAMR_BUILD_LIBC_BUILTIN": "1",
-		    "WAMR_BUILD_FAST_INTERP": "0",
+        "CHERI_STATIC_BUILD": "1",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "WAMR_BUILD_AOT": "1",
+        "WAMR_BUILD_LIBC_BUILTIN": "1",
+        "WAMR_BUILD_FAST_INTERP": "1",
+        "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
+        "WAMR_BUILD_DEBUG_INTERP": "0",
+        "WAMR_BUILD_MEMORY_TRACING": "0",
         "WAMR_BUILD_SIMD": "0",
-        "WAMR_APP":  "1"
+        "WAMR_DISABLE_HW_BOUND_CHECK": "1",
+        "WAMR_BUILD_REF_TYPES": "1",
+        "WAMR_APP": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1",
+        "WAMR_BUILD_AOT_CHERI_PTR": "16",
+        "WAMR_BUILD_AOT_EXCEPTION_WORKAROUND": "1",
+        "WAMR_BUILD_PERF_PROFILING": "0",
+        "WAMR_BUILD_MEMORY_PROFILING": "0",
+        "WAMR_EXTERNREF_APP": "0"
       },
       "condition": {
         "type": "equals",
@@ -37,7 +47,7 @@
           "intelliSenseMode": "linux-gcc-arm",
           "intelliSenseOptions": {
             "useCompilerDefaults": true,
-            "additionalCompilerArgs": ["-march=morello"]
+            "additionalCompilerArgs": [ "-march=morello" ]
           }
         },
         "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
@@ -60,9 +70,10 @@
       "inherits": "ARMc64-hybrid-debug",
       "name": "ARMc64-PureCap-debug",
       "displayName": "Debug armC64+ PureCap",
-      "toolchainFile": "toolchain.cmake",
       "cacheVariables": {
-        "CHERI_PURECAP": "1"
+        "CHERI_PURECAP": "1",
+        "MORELLO_PURECAP_LIBS_FOLDER": "/purecap-lib",
+        "WAMR_BUILD_AOT_CHERI_PTR": "0"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -75,23 +86,266 @@
         }
       }
     },
-        {
-          "inherits": "ARMc64-hybrid-debug",
-          "name": "ARMc64-hybrid-release",
-          "displayName": "Release armC64 Hybrid",
-          "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "NDEBUG": "1"
+    {
+      "inherits": "ARMc64-PureCap-debug",
+      "name": "ARMc64-PureCap-CapMgr-debug",
+      "displayName": "Debug armC64+ CapMgr PureCap",
+      "cacheVariables": {
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap-capmgr",
+        "WAMR_BUILD_AOT": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "0"
+      }
+    },
+    {
+      "inherits": "ARMc64-hybrid-debug",
+      "name": "ARMc64-hybrid-release",
+      "displayName": "Release armC64 Hybrid",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "inherits": "ARMc64-PureCap-debug",
+      "name": "ARMc64-PureCap-release",
+      "displayName": "Release armC64+ PureCap",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "inherits": "ARMc64-PureCap-CapMgr-debug",
+      "name": "ARMc64-PureCap-CapMgr-release",
+      "displayName": "Release armC64+ CapMgr PureCap",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "name": "Linux_x86_64_Debug",
+      "displayName": "Linux Debug x86_64",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain_x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux",
+        "WAMR_BUILD_AOT": "1",
+        "WAMR_BUILD_LIBC_BUILTIN": "1",
+        "WAMR_BUILD_FAST_INTERP": "1",
+        "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
+        "WAMR_BUILD_DEBUG_INTERP": "0",
+        "WAMR_BUILD_MEMORY_TRACING": "0",
+        "WAMR_BUILD_SIMD": "0",
+        "WAMR_BUILD_REF_TYPES": "1",
+        "WAMR_APP": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "1",
+        "WAMR_BUILD_AOT_CHERI_PTR": "16"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
           }
         },
-        {
-          "inherits": "ARMc64-PureCap-debug",
-          "name": "ARMc64-PureCap-release",
-          "displayName": "Release armC64+ PureCap",
-          "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release",
-            "NDEBUG": "1"
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
           }
         }
+      }
+    },
+    {
+      "inherits": "Linux_x86_64_Debug",
+      "name": "Linux_x86_64_Release",
+      "displayName": "Linux Release x86_64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NDEBUG": "1"
+      }
+    },
+    {
+      "name": "WAMRc_Linux_x86_64_Debug",
+      "displayName": "WAMRc Linux Debug x86_64",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain_x86_64.cmake",
+      "cacheVariables": {
+        "WAMRC_TOOL": "1",
+        "LLVM_DIR": "$env{HOME}/cross-llvm-morello/llvm-project-releases-morello-linux-release-1.6/lib/cmake/llvm",
+        "WAMR_BUILD_WITH_CUSTOM_LLVM": "1",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux",
+        "WAMR_BUILD_TARGET": "X86_64",
+        "WAMR_BUILD_AOT": "1",
+        "WAMR_BUILD_LIBC_BUILTIN": "1",
+        "WAMR_BUILD_INTERP": "1",
+        "WAMR_BUILD_FAST_INTERP": "0",
+        "WAMR_BUILD_DEBUG_PREPROCESSOR": "0",
+        "WAMR_BUILD_DEBUG_INTERP": "0",
+        "WAMR_BUILD_MEMORY_TRACING": "0",
+        "WAMR_BUILD_SIMD": "0",
+        "WAMR_DISABLE_HW_BOUND_CHECK": "1",
+        "WAMR_APP": "0",
+        "WAMR_BUILD_NATIVE_TEST_LIB": "0",
+        "WAMR_BUILD_AOT_CHERI_PTR": "16",
+        "WAMR_BUILD_REF_TYPES": "1"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "name": "Externref_App_Purecap",
+      "displayName": "Externref_App_Purecap",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "WAMR_EXTERNREF_APP": "1"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "name": "Externref_App_x86_64",
+      "inherits": "Externref_App_Purecap",
+      "displayName": "Externref_App_x86_64",
+      "toolchainFile": "toolchain_x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux"
+      }
+    },
+    {
+      "name": "Benchmarks_Hybrid",
+      "displayName": "Benchmarks Debug arm64 Hybrid",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "$env{HOME}/install/${presetName}",
+      "toolchainFile": "toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/install/${presetName}",
+        "WAMR_BUILD_PLATFORM": "linux-cheri-purecap",
+        "BENCHMARKS": "1",
+        "CHERI_PURECAP":  "0"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": "Linux",
+          "intelliSenseMode": "linux-gcc-x64",
+          "intelliSenseOptions": {
+            "useCompilerDefaults": true
+          }
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}",
+          "intelliSenseMode": "linux-gcc-x64",
+          "rsyncCommandArgs": [ "-t", "--delete" ],
+          "copySources": true,
+          "copyBuildOutput": true,
+          "copyOptimizations": { "maxSmallChange": 0 },
+          "copyExcludeDirectoriesList": [],
+          "copySourcesOptions": {
+            "exclusionList": [ ".vs", ".git", "out" ],
+            "outputVerbosity": "Normal",
+            "method": "rsync"
+          }
+        }
+      }
+    },
+    {
+      "name": "Benchmarks_Purecap",
+	    "inherits": "Benchmarks_Hybrid",
+      "displayName": "Benchmarks Debug armC64+ Purecap",
+      "toolchainFile": "llvm_toolchain.cmake",
+      "cacheVariables": {
+  		"CHERI_PURECAP": "1"
+      }
+    }
   ]
 }

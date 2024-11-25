@@ -43,7 +43,12 @@ typedef struct WASMInterpFrame {
        the callee will put return values here continuously */
     uint32 ret_offset;
     uint32 *lp;
+#ifdef __CHERI__
+    uint32 operand[1] __attribute__((aligned));
+#else
     uint32 operand[1];
+#endif
+
 #else
     /* Operand stack top pointer of the current frame. The bottom of
        the stack is the next cell after the last local variable. */
@@ -96,8 +101,12 @@ wasm_interp_interp_frame_size(unsigned all_cell_num)
 #endif
 
 #ifdef __CHERI__
-    // Allow for 4 extra alignments
+    // Allow for 4 extra alignments (classic) / 3 (fast) to cover potential aligning up within frame
+#if WASM_ENABLE_FAST_INTERP == 0
+    frame_size += sizeof(void* __capability) * 3;
+#else
     frame_size += sizeof(void* __capability) * 4;
+#endif
     return cheri_align_up(frame_size, __BIGGEST_ALIGNMENT__);
 #else
     return align_uint(frame_size, 4);

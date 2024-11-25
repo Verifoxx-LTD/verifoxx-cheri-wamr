@@ -3,6 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
 
+#ifdef __CHERI__
+#include <cheriintrin.h>
+#endif
+
 #include "aot_reloc.h"
 
 #define R_AARCH64_MOVW_UABS_G0 263
@@ -32,6 +36,15 @@
 
 #define R_AARCH64_JUMP26 282
 #define R_AARCH64_CALL26 283
+
+/* Morello ELF additions which are required */
+#ifdef __CHERI__
+#define R_MORELLO_JUMP26 0xe002
+#define R_MORELLO_CALL26 0xe003
+
+#define R_MORELLO_ADR_PREL_PG_HI20 0xe005
+#define R_MORELLO_ADR_PREL_PG_HI20_NC 0xe006
+#endif
 
 /* clang-format off */
 static SymbolMap target_sym_map[] = {
@@ -80,6 +93,44 @@ get_current_target(char *target_buf, uint32 target_buf_size)
 }
 #undef BUILD_TARGET_AARCH64_DEFAULT
 
+#if ENABLE_CHERI_PURECAP
+static uint32
+get_plt_item_size()
+{
+    /* 8*4 bytes instructions and 16 bytes symbol address */
+    return 16 + 8*4;
+}
+
+void
+init_plt_table(uint8* plt)
+{
+/*
+    asm("stp  c16, c30, [csp, #-32]!\n"
+        "adr  c30, #28\n"
+        "ldr  c16, [c30]\n" :::);
+        */
+    uint32 i, num = sizeof(target_sym_map) / sizeof(SymbolMap);
+    for (i = 0; i < num; i++) {
+        uint32* p = (uint32*)plt;
+        *p++ = 0x62bf7bf0; /* stp  c16, c30, [csp, #-32]! */
+        *p++ = 0x100000fe; /* adr  c30, #28; symbol addr is PC + 7 instructions
+                              below */
+        *p++ = 0xc24003d0; /* ldr  c16, [c30]   */
+        *p++ = 0xc2c23200; /* blr  c16          */
+        *p++ = 0x22c17bf0; /* ldp  c16, c30, [sp], #32  */
+        *p++ = 0xc2c213c0; /* br   c30          */
+
+        *p++ = 0xd503201f; /* nop */
+        *p++ = 0xd503201f; /* nop */
+
+        /* symbol addr */
+        *((void **)p) = target_sym_map[i].symbol_addr;   // Will be relative to PCC when execute;
+
+        p += 4;
+        plt += get_plt_item_size();
+    }
+}
+#else
 static uint32
 get_plt_item_size()
 {
@@ -90,6 +141,7 @@ get_plt_item_size()
 void
 init_plt_table(uint8 *plt)
 {
+
     uint32 i, num = sizeof(target_sym_map) / sizeof(SymbolMap);
     for (i = 0; i < num; i++) {
         uint32 *p = (uint32 *)plt;
@@ -106,6 +158,7 @@ init_plt_table(uint8 *plt)
         plt += get_plt_item_size();
     }
 }
+#endif
 
 uint32
 get_plt_table_size()
@@ -142,6 +195,11 @@ apply_relocation(AOTModule *module, uint8 *target_section_addr,
                  int32 symbol_index, char *error_buf, uint32 error_buf_size)
 {
     switch (reloc_type) {
+
+#ifdef __CHERI__
+        case R_MORELLO_CALL26:
+        case R_MORELLO_JUMP26:
+#endif
         case R_AARCH64_CALL26:
         case R_AARCH64_JUMP26:
         {
@@ -385,6 +443,52 @@ apply_relocation(AOTModule *module, uint8 *target_section_addr,
             }
             break;
         }
+
+#ifdef __CHERI__
+        case R_MORELLO_ADR_PREL_PG_HI20:
+        case R_MORELLO_ADR_PREL_PG_HI20_NC:
+        {
+            void* S = symbol_addr,
+                * P = (void*)(target_section_addr + reloc_offset);
+            int64 X, A, initial_addend;
+            int32 insn, immhi18, immlo2, imm20;
+
+            CHECK_RELOC_OFFSET(sizeof(int32));
+
+            insn = *(int32*)P;
+            immhi18 = (insn >> 5) & 0x3FFFF;    // Recover immHi 
+            immlo2 = (insn >> 29) & 0x3;        // Recover immLo
+            imm20 = (immhi18 << 2) | immlo2;    // Build full value
+
+            // If bit 23 is 1 then sign extend, else zero extend
+            if ((insn >> 23) & 0x1)
+            {
+                SIGN_EXTEND_TO_INT64(imm20 << 12, 32, initial_addend);  // Final value is bits 31:12
+            }
+            else
+            {
+                initial_addend = imm20 << 12;
+            }
+
+            A = initial_addend;
+            A += (int64)reloc_addend;
+
+            /* Page(S+A) - Page(P) */
+            X = Page((int64)S + A) - Page((int64)P);
+
+            /* Check overflow for R_MORELLO_ADR_PREL_PG_HI20 only: 2**-31 <= X < 2**31 */
+            if (reloc_type == R_MORELLO_ADR_PREL_PG_HI20
+                && (X >= ((int64)2 * BH_GB) || X < ((int64)-2 * BH_GB)))
+                goto overflow_check_fail;
+
+            /* write the imm20 back to instruction */
+            immhi18 = (int32)( (X >> (12+2)) & 0x3FFFF );
+            immlo2 = (int32)( (X >> 12) & 0x3);
+            *(int32*)P = (insn & 0x9F80001F) | (immlo2 << 29) | (immhi18 << 5); // Mask off parts to be replaced & set
+
+            break;
+        }
+#endif
 
         default:
             if (error_buf != NULL)

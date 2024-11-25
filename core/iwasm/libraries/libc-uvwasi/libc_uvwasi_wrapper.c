@@ -942,6 +942,10 @@ wasi_proc_exit(wasm_exec_env_t exec_env, wasi_exitcode_t rval)
        as normal */
     wasm_runtime_set_exception(module_inst, "wasi proc exit");
     wasi_ctx->exit_code = rval;
+
+#if ENABLE_AOT_EXCEPTION_WORKAROUND != 0
+    exec_env->wasi_proc_exit_called = true;
+#endif
 }
 
 static wasi_errno_t

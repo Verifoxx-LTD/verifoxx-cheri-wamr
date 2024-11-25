@@ -52,7 +52,7 @@ aot_emit_exception(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
         if (comp_ctx->is_jit_mode) {
             /* Create function type */
-            if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+            if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
                 aot_set_last_error("create LLVM function type failed.");
                 return false;
             }
@@ -66,7 +66,7 @@ aot_emit_exception(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
         }
         else if (comp_ctx->is_indirect_mode) {
             int32 func_index;
-            if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+            if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
                 aot_set_last_error("create LLVM function type failed.");
                 return false;
             }

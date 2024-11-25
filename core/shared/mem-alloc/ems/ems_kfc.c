@@ -4,6 +4,7 @@
  */
 
 #include "ems_gc_internal.h"
+#include <stddef.h>
 
 static gc_handle_t
 gc_init_internal(gc_heap_t *heap, char *base_addr, gc_size_t heap_max_size)
@@ -27,7 +28,7 @@ gc_init_internal(gc_heap_t *heap, char *base_addr, gc_size_t heap_max_size)
     heap->total_free_size = heap->current_size;
     heap->highmark_size = 0;
 
-    root = &heap->kfc_tree_root;
+    root = heap->kfc_tree_root = (hmu_tree_node_t *)heap->kfc_tree_root_buf;
     memset(root, 0, sizeof *root);
     root->size = sizeof *root;
     hmu_set_ut(&root->hmu_header, HMU_FC);
@@ -37,6 +38,9 @@ gc_init_internal(gc_heap_t *heap, char *base_addr, gc_size_t heap_max_size)
     memset(q, 0, sizeof *q);
     hmu_set_ut(&q->hmu_header, HMU_FC);
     hmu_set_size(&q->hmu_header, heap->current_size);
+
+    ASSERT_TREE_NODE_ALIGNED_ACCESS(q);
+    ASSERT_TREE_NODE_ALIGNED_ACCESS(root);
 
     hmu_mark_pinuse(&q->hmu_header);
     root->right = q;
@@ -52,7 +56,13 @@ gc_handle_t
 gc_init_with_pool(char *buf, gc_size_t buf_size)
 {
     char *buf_end = buf + buf_size;
-    char *buf_aligned = (char *)(((uintptr_t)buf + 7) & (uintptr_t)~7);
+
+#if ENABLE_CHERI_PURECAP
+    // cheri_align_up() builtin guarantees fastest operation and minimum code size
+    char* buf_aligned = cheri_align_up(buf, GC_ALIGNMENT_SIZE);
+#else
+    char* buf_aligned = (char*)(((uintptr_t)buf + GC_ALIGNMENT_SIZE_MASK) & (uintptr_t)~GC_ALIGNMENT_SIZE_MASK);
+#endif
     char *base_addr = buf_aligned + sizeof(gc_heap_t);
     gc_heap_t *heap = (gc_heap_t *)buf_aligned;
     gc_size_t heap_max_size;
@@ -63,9 +73,15 @@ gc_init_with_pool(char *buf, gc_size_t buf_size)
         return NULL;
     }
 
+#if ENABLE_CHERI_PURECAP
+    base_addr = cheri_align_up(base_addr, GC_ALIGNMENT_SIZE) + GC_HEAD_PADDING;
+#else
     base_addr =
-        (char *)(((uintptr_t)base_addr + 7) & (uintptr_t)~7) + GC_HEAD_PADDING;
-    heap_max_size = (uint32)(buf_end - base_addr) & (uint32)~7;
+        (char*)(((uintptr_t)base_addr + GC_ALIGNMENT_SIZE_MASK) & (uintptr_t)~GC_ALIGNMENT_SIZE_MASK)
+        + GC_HEAD_PADDING;
+#endif
+
+    heap_max_size = (uint32)(buf_end - base_addr) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
 #if WASM_ENABLE_MEMORY_TRACING != 0
     os_printf("Heap created, total size: %u\n", buf_size);
@@ -86,8 +102,8 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
     char *pool_buf_end = pool_buf + pool_buf_size;
     gc_size_t heap_max_size;
 
-    if ((((uintptr_t)struct_buf) & 7) != 0) {
-        os_printf("[GC_ERROR]heap init struct buf not 8-byte aligned\n");
+    if ((((uintptr_t)struct_buf) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap init struct buf not suitably byte aligned\n");
         return NULL;
     }
 
@@ -97,8 +113,8 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
         return NULL;
     }
 
-    if ((((uintptr_t)pool_buf) & 7) != 0) {
-        os_printf("[GC_ERROR]heap init pool buf not 8-byte aligned\n");
+    if ((((uintptr_t)pool_buf) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap init pool buf not suitably byte aligned\n");
         return NULL;
     }
 
@@ -108,7 +124,7 @@ gc_init_with_struct_and_pool(char *struct_buf, gc_size_t struct_buf_size,
         return NULL;
     }
 
-    heap_max_size = (uint32)(pool_buf_end - base_addr) & (uint32)~7;
+    heap_max_size = (uint32)(pool_buf_end - base_addr) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
 #if WASM_ENABLE_MEMORY_TRACING != 0
     os_printf("Heap created, total size: %u\n",
@@ -150,11 +166,16 @@ gc_get_heap_struct_size()
 }
 
 static void
-adjust_ptr(uint8 **p_ptr, intptr_t offset)
+adjust_ptr(uint8 **p_ptr, uint8* base_addr_old, char *base_addr_new)
 {
+    // Function updated to work with CHERI, calculate offsets from each base separately
     if (*p_ptr)
-        *p_ptr += offset;
+    {
+        ptrdiff_t offset = *p_ptr - base_addr_old;
+        *p_ptr = ((uint8*)base_addr_new) + offset;
+    }
 }
+
 
 int
 gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
@@ -162,24 +183,30 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
     gc_heap_t *heap = (gc_heap_t *)handle;
     char *base_addr_new = pool_buf_new + GC_HEAD_PADDING;
     char *pool_buf_end = pool_buf_new + pool_buf_size;
-    intptr_t offset = (uint8 *)base_addr_new - (uint8 *)heap->base_addr;
+
+    // Note: To support CHERI platforms, the mechanism to adjust the heap node pointers is modified.
+    // Previously we calculated an offset between old and new bases and add this to the pointer,
+    // now we apply the offset based on the new base address
+    uint8 *base_addr_old = (uint8 *)heap->base_addr;
+
     hmu_t *cur = NULL, *end = NULL;
     hmu_tree_node_t *tree_node;
+    uint8 **p_left, **p_right, **p_parent;
     gc_size_t heap_max_size, size;
 
-    if ((((uintptr_t)pool_buf_new) & 7) != 0) {
-        os_printf("[GC_ERROR]heap migrate pool buf not 8-byte aligned\n");
+    if ((((uintptr_t)pool_buf_new) & GC_ALIGNMENT_SIZE_MASK) != 0) {
+        os_printf("[GC_ERROR]heap migrate pool buf not suitably byte aligned\n");
         return GC_ERROR;
     }
 
-    heap_max_size = (uint32)(pool_buf_end - base_addr_new) & (uint32)~7;
+    heap_max_size = (uint32)(pool_buf_end - base_addr_new) & (uint32)~GC_ALIGNMENT_SIZE_MASK;
 
     if (pool_buf_end < base_addr_new || heap_max_size < heap->current_size) {
         os_printf("[GC_ERROR]heap migrate invlaid pool buf size\n");
         return GC_ERROR;
     }
 
-    if (offset == 0)
+    if ( (uint8*)base_addr_new == base_addr_old)
         return 0;
 
     if (heap->is_heap_corrupted) {
@@ -188,9 +215,18 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
     }
 
     heap->base_addr = (uint8 *)base_addr_new;
-    adjust_ptr((uint8 **)&heap->kfc_tree_root.left, offset);
-    adjust_ptr((uint8 **)&heap->kfc_tree_root.right, offset);
-    adjust_ptr((uint8 **)&heap->kfc_tree_root.parent, offset);
+
+    ASSERT_TREE_NODE_ALIGNED_ACCESS(heap->kfc_tree_root);
+
+    p_left = (uint8 **)((uint8 *)heap->kfc_tree_root
+                        + offsetof(hmu_tree_node_t, left));
+    p_right = (uint8 **)((uint8 *)heap->kfc_tree_root
+                         + offsetof(hmu_tree_node_t, right));
+    p_parent = (uint8 **)((uint8 *)heap->kfc_tree_root
+                          + offsetof(hmu_tree_node_t, parent));
+    adjust_ptr(p_left, base_addr_old, base_addr_new);
+    adjust_ptr(p_right, base_addr_old, base_addr_new);
+    adjust_ptr(p_parent, base_addr_old, base_addr_new);
 
     cur = (hmu_t *)heap->base_addr;
     end = (hmu_t *)((char *)heap->base_addr + heap->current_size);
@@ -206,12 +242,21 @@ gc_migrate(gc_handle_t handle, char *pool_buf_new, gc_size_t pool_buf_size)
 
         if (hmu_get_ut(cur) == HMU_FC && !HMU_IS_FC_NORMAL(size)) {
             tree_node = (hmu_tree_node_t *)cur;
-            adjust_ptr((uint8 **)&tree_node->left, offset);
-            adjust_ptr((uint8 **)&tree_node->right, offset);
-            if (tree_node->parent != &heap->kfc_tree_root)
+
+            ASSERT_TREE_NODE_ALIGNED_ACCESS(tree_node);
+
+            p_left = (uint8 **)((uint8 *)tree_node
+                                + offsetof(hmu_tree_node_t, left));
+            p_right = (uint8 **)((uint8 *)tree_node
+                                 + offsetof(hmu_tree_node_t, right));
+            p_parent = (uint8 **)((uint8 *)tree_node
+                                  + offsetof(hmu_tree_node_t, parent));
+            adjust_ptr(p_left, base_addr_old, base_addr_new);
+            adjust_ptr(p_right, base_addr_old, base_addr_new);
+            if (tree_node->parent != heap->kfc_tree_root)
                 /* The root node belongs to heap structure,
                    it is fixed part and isn't changed. */
-                adjust_ptr((uint8 **)&tree_node->parent, offset);
+                adjust_ptr(p_parent, base_addr_old, base_addr_new);
         }
         cur = (hmu_t *)((char *)cur + size);
     }

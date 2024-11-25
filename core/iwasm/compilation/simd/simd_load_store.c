@@ -82,7 +82,7 @@ aot_compile_simd_load_extend(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     /* to vector ptr type */
     if (!sub_vector_type
-        || !(sub_vector_ptr_type = LLVMPointerType(sub_vector_type, 0))) {
+        || !(sub_vector_ptr_type = LLVMPointerType(sub_vector_type, comp_ctx->target_address_space))) {
         HANDLE_FAILURE("LLVMPointerType");
         return false;
     }

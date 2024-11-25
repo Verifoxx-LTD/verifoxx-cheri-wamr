@@ -6,6 +6,11 @@
 #include "libc_wasi_wrapper.h"
 #include "bh_platform.h"
 #include "wasm_export.h"
+#include "wasm_runtime_common.h"
+
+#if WASM_ENABLE_THREAD_MGR != 0
+#include "../../../thread-mgr/thread_manager.h"
+#endif
 
 void
 wasm_runtime_set_exception(wasm_module_inst_t module, const char *exception);
@@ -46,22 +51,22 @@ typedef struct iovec_app {
     uint32 buf_len;
 } iovec_app_t;
 
-typedef struct WASIContext {
-    struct fd_table *curfds;
-    struct fd_prestats *prestats;
-    struct argv_environ_values *argv_environ;
-    struct addr_pool *addr_pool;
-    char *ns_lookup_buf;
-    char **ns_lookup_list;
-    char *argv_buf;
-    char **argv_list;
-    char *env_buf;
-    char **env_list;
-    uint32_t exit_code;
-} * wasi_ctx_t;
+typedef struct WASIContext *wasi_ctx_t;
 
 wasi_ctx_t
 wasm_runtime_get_wasi_ctx(wasm_module_inst_t module_inst);
+
+static inline uint64_t
+min_uint64(uint64_t a, uint64_t b)
+{
+    return a > b ? b : a;
+}
+
+static inline uint32_t
+min_uint32(uint32_t a, uint32_t b)
+{
+    return a > b ? b : a;
+}
 
 static inline struct fd_table *
 wasi_ctx_get_curfds(wasm_module_inst_t module_inst, wasi_ctx_t wasi_ctx)
@@ -951,6 +956,108 @@ wasi_path_remove_directory(wasm_exec_env_t exec_env, wasi_fd_t fd,
     return wasmtime_ssp_path_remove_directory(curfds, fd, path, path_len);
 }
 
+#if WASM_ENABLE_THREAD_MGR != 0
+static __wasi_timestamp_t
+get_timeout_for_poll_oneoff(const wasi_subscription_t *in,
+                            uint32 nsubscriptions)
+{
+    __wasi_timestamp_t timeout = (__wasi_timestamp_t)-1;
+    uint32 i = 0;
+
+    for (i = 0; i < nsubscriptions; ++i) {
+        const __wasi_subscription_t *s = &in[i];
+        if (s->u.type == __WASI_EVENTTYPE_CLOCK
+            && (s->u.u.clock.flags & __WASI_SUBSCRIPTION_CLOCK_ABSTIME) == 0) {
+            timeout = min_uint64(timeout, s->u.u.clock.timeout);
+        }
+    }
+    return timeout;
+}
+
+static void
+update_clock_subscription_data(wasi_subscription_t *in, uint32 nsubscriptions,
+                               const wasi_timestamp_t new_timeout)
+{
+    uint32 i = 0;
+    for (i = 0; i < nsubscriptions; ++i) {
+        __wasi_subscription_t *s = &in[i];
+        if (s->u.type == __WASI_EVENTTYPE_CLOCK) {
+            s->u.u.clock.timeout = new_timeout;
+        }
+    }
+}
+
+static wasi_errno_t
+execute_interruptible_poll_oneoff(
+#if !defined(WASMTIME_SSP_STATIC_CURFDS)
+    struct fd_table *curfds,
+#endif
+    const __wasi_subscription_t *in, __wasi_event_t *out, size_t nsubscriptions,
+    size_t *nevents, wasm_exec_env_t exec_env)
+{
+    if (nsubscriptions == 0) {
+        *nevents = 0;
+        return __WASI_ESUCCESS;
+    }
+
+    wasi_errno_t err;
+    __wasi_timestamp_t elapsed = 0;
+    bool all_outs_are_type_clock;
+    uint32 i;
+
+    const __wasi_timestamp_t timeout = get_timeout_for_poll_oneoff(
+                                 in, nsubscriptions),
+                             time_quant = 1e9;
+    const uint64 size_to_copy =
+        nsubscriptions * (uint64)sizeof(wasi_subscription_t);
+    __wasi_subscription_t *in_copy = NULL;
+
+    if (size_to_copy >= UINT32_MAX
+        || !(in_copy = (__wasi_subscription_t *)wasm_runtime_malloc(
+                 (uint32)size_to_copy))) {
+        return __WASI_ENOMEM;
+    }
+
+    bh_memcpy_s(in_copy, size_to_copy, in, size_to_copy);
+
+    while (timeout == (__wasi_timestamp_t)-1 || elapsed <= timeout) {
+        /* update timeout for clock subscription events */
+        update_clock_subscription_data(
+            in_copy, nsubscriptions, min_uint64(time_quant, timeout - elapsed));
+        err = wasmtime_ssp_poll_oneoff(curfds, in_copy, out, nsubscriptions,
+                                       nevents);
+        elapsed += time_quant;
+
+        if (err) {
+            wasm_runtime_free(in_copy);
+            return err;
+        }
+
+        if (wasm_cluster_is_thread_terminated(exec_env)) {
+            wasm_runtime_free(in_copy);
+            return EINTR;
+        }
+        else if (*nevents > 0) {
+            all_outs_are_type_clock = true;
+            for (i = 0; i < *nevents; i++) {
+                if (out[i].type != __WASI_EVENTTYPE_CLOCK) {
+                    all_outs_are_type_clock = false;
+                    break;
+                }
+            }
+
+            if (!all_outs_are_type_clock) {
+                wasm_runtime_free(in_copy);
+                return __WASI_ESUCCESS;
+            }
+        }
+    }
+
+    wasm_runtime_free(in_copy);
+    return __WASI_ESUCCESS;
+}
+#endif
+
 static wasi_errno_t
 wasi_poll_oneoff(wasm_exec_env_t exec_env, const wasi_subscription_t *in,
                  wasi_event_t *out, uint32 nsubscriptions, uint32 *nevents_app)
@@ -958,7 +1065,7 @@ wasi_poll_oneoff(wasm_exec_env_t exec_env, const wasi_subscription_t *in,
     wasm_module_inst_t module_inst = get_module_inst(exec_env);
     wasi_ctx_t wasi_ctx = get_wasi_ctx(module_inst);
     struct fd_table *curfds = wasi_ctx_get_curfds(module_inst, wasi_ctx);
-    size_t nevents;
+    size_t nevents = 0;
     wasi_errno_t err;
 
     if (!wasi_ctx)
@@ -969,7 +1076,12 @@ wasi_poll_oneoff(wasm_exec_env_t exec_env, const wasi_subscription_t *in,
         || !validate_native_addr(nevents_app, sizeof(uint32)))
         return (wasi_errno_t)-1;
 
+#if WASM_ENABLE_THREAD_MGR == 0
     err = wasmtime_ssp_poll_oneoff(curfds, in, out, nsubscriptions, &nevents);
+#else
+    err = execute_interruptible_poll_oneoff(curfds, in, out, nsubscriptions,
+                                            &nevents, exec_env);
+#endif
     if (err)
         return err;
 
@@ -987,6 +1099,10 @@ wasi_proc_exit(wasm_exec_env_t exec_env, wasi_exitcode_t rval)
        as normal */
     wasm_runtime_set_exception(module_inst, "wasi proc exit");
     wasi_ctx->exit_code = rval;
+
+#if ENABLE_AOT_EXCEPTION_WORKAROUND != 0
+    exec_env->wasi_proc_exit_called = true;
+#endif
 }
 
 static wasi_errno_t
@@ -1861,12 +1977,6 @@ allocate_iovec_app_buffer(wasm_module_inst_t module_inst,
     return __WASI_ESUCCESS;
 }
 
-static inline size_t
-min(size_t a, size_t b)
-{
-    return a > b ? b : a;
-}
-
 static wasi_errno_t
 copy_buffer_to_iovec_app(wasm_module_inst_t module_inst, uint8 *buf_begin,
                          uint32 buf_size, iovec_app_t *data, uint32 data_len,
@@ -1899,7 +2009,7 @@ copy_buffer_to_iovec_app(wasm_module_inst_t module_inst, uint8 *buf_begin,
          * only copy the amount in the app buffer. Otherwise, we fill the iovec
          * buffer and reduce size to copy on the next iteration
          */
-        size_to_copy_into_iovec = min(data->buf_len, size_to_copy);
+        size_to_copy_into_iovec = min_uint32(data->buf_len, size_to_copy);
 
         native_addr = (void *)addr_app_to_native(data->buf_offset);
         bh_memcpy_s(native_addr, size_to_copy_into_iovec, buf,

@@ -31,6 +31,7 @@
 #endif
 
 #include "aot_orc_extra.h"
+#include "aot_llvm_extra2.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -381,6 +382,8 @@ typedef struct AOTCompContext {
      * file for some architecture (such as arc) */
     const char *external_asm_compiler;
     const char *asm_compiler_flags;
+
+    unsigned int target_address_space;    // Target default address space (not always 0)
 } AOTCompContext;
 
 enum {
@@ -415,6 +418,7 @@ typedef struct AOTCompOption {
     uint32 stack_bounds_checks;
     char **custom_sections;
     uint32 custom_sections_count;
+    const char *stack_usage_file;
 } AOTCompOption, *aot_comp_option_t;
 
 bool

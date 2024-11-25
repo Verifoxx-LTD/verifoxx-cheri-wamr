@@ -5,7 +5,7 @@
 
 #include "platform_api_vmcore.h"
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
 #include <sys/mman.h>
 #include "bh_log.h"
 #endif
@@ -41,6 +41,7 @@ void *
 os_mmap(void *hint, size_t size, int prot, int flags)
 {
     int map_prot = PROT_NONE;
+
     int map_flags = MAP_ANONYMOUS | MAP_PRIVATE;
     uint64 request_size, page_size;
     uint8 *addr = MAP_FAILED;
@@ -134,16 +135,19 @@ os_mmap(void *hint, size_t size, int prot, int flags)
         /* try 5 times */
         for (i = 0; i < 5; i++) {
 
-#ifdef ENABLE_CHERI_PURECAP
+#if ENABLE_CHERI_PURECAP
             // For CHERI pure-cap we must request full access and use mprotect to adjust
             // Otherwise the capability returned has no r/w/x permissions
 			LOG_DEBUG("CHERI-PURECAP mode calls mmap() with full access and mprotect() with flags: %x\n", map_prot);
-            addr = mmap(hint, request_size, PROT_READ|PROT_WRITE|PROT_EXEC, map_flags, -1, 0);
-            if ((size_t)addr != MAP_FAILED) {
-                if (MAP_FAILED != (size_t)mprotect(addr, request_size, map_prot))
-					break;
+            addr = mmap(hint, request_size, PROT_MAX(PROT_READ|PROT_WRITE|PROT_EXEC), map_flags, -1, 0);
+            if (MAP_FAILED != addr && 0 == mprotect(addr, request_size, map_prot))
+            {
+                break;
             }
-
+            else
+            {
+                addr = MAP_FAILED;  // Either mmap() or mprotect() failed
+            }
 #else
             addr = mmap(hint, request_size, map_prot, map_flags, -1, 0);
             if (addr != MAP_FAILED)
@@ -271,5 +275,5 @@ os_mprotect(void *addr, size_t size, int prot)
 }
 
 void
-os_dcache_flush(void)
+os_dcache_flush()
 {}

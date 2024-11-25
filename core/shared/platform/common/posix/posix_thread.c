@@ -9,6 +9,10 @@
 #include "platform_api_vmcore.h"
 #include "platform_api_extension.h"
 
+#if ENABLE_CHERI_PURECAP
+#include "cheri_syscalls.h"
+#endif
+
 typedef struct {
     thread_start_routine_t start;
     void *arg;
@@ -61,8 +65,9 @@ os_thread_create_with_prio(korp_tid *tid, thread_start_routine_t start,
     pthread_attr_init(&tattr);
     pthread_attr_setdetachstate(&tattr, PTHREAD_CREATE_JOINABLE);
     if (pthread_attr_setstacksize(&tattr, stack_size) != 0) {
-        os_printf("Invalid thread stack size %u. Min stack size on Linux = %u",
-                  stack_size, PTHREAD_STACK_MIN);
+        os_printf("Invalid thread stack size %u. "
+                  "Min stack size on Linux = %u\n",
+                  stack_size, (unsigned int)PTHREAD_STACK_MIN);
         pthread_attr_destroy(&tattr);
         return BHT_ERROR;
     }
@@ -377,7 +382,12 @@ os_thread_get_stack_boundary()
 
 #ifdef __linux__
     if (pthread_getattr_np(self, &attr) == 0) {
+
+#if ENABLE_CHERI_PURECAP
+        cheri_pthread_attr_getstack(&attr, (void**)&addr, &stack_size);
+#else
         pthread_attr_getstack(&attr, (void **)&addr, &stack_size);
+#endif
         pthread_attr_getguardsize(&attr, &guard_size);
         pthread_attr_destroy(&attr);
         if (stack_size > max_stack_size)

@@ -163,7 +163,7 @@ call_aot_invoke_native_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     /* prepare function pointer */
     if (comp_ctx->is_jit_mode) {
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -177,7 +177,7 @@ call_aot_invoke_native_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     }
     else if (comp_ctx->is_indirect_mode) {
         int32 func_index;
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -208,7 +208,7 @@ call_aot_invoke_native_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     /* prepare frame_lp */
     for (i = 0; i < param_count; i++) {
         if (!(elem_idx = I32_CONST(cell_num))
-            || !(elem_ptr_type = LLVMPointerType(param_types[i], 0))) {
+            || !(elem_ptr_type = LLVMPointerType(param_types[i], comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add const or pointer type failed.");
             return false;
         }
@@ -252,7 +252,7 @@ call_aot_invoke_native_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     /* get function return value */
     if (wasm_ret_type != VALUE_TYPE_VOID) {
-        if (!(ret_ptr_type = LLVMPointerType(ret_type, 0))) {
+        if (!(ret_ptr_type = LLVMPointerType(ret_type, comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add pointer type failed.");
             return false;
         }
@@ -532,7 +532,7 @@ check_app_addr_and_convert(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     /* prepare function pointer */
     if (comp_ctx->is_jit_mode) {
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -547,7 +547,7 @@ check_app_addr_and_convert(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     }
     else if (comp_ctx->is_indirect_mode) {
         int32 func_index;
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -715,7 +715,7 @@ aot_compile_op_call(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
         for (i = 0; i < ext_ret_count; i++) {
             if (!(ext_ret_idx = I32_CONST(cell_num))
                 || !(ext_ret_ptr_type =
-                         LLVMPointerType(TO_LLVM_TYPE(ext_ret_types[i]), 0))) {
+                         LLVMPointerType(TO_LLVM_TYPE(ext_ret_types[i]), comp_ctx->target_address_space))) {
                 aot_set_last_error("llvm add const or pointer type failed.");
                 goto fail;
             }
@@ -823,7 +823,7 @@ aot_compile_op_call(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
                 goto fail;
             }
 
-            if (!(func_ptr_type = LLVMPointerType(native_func_type, 0))) {
+            if (!(func_ptr_type = LLVMPointerType(native_func_type, comp_ctx->target_address_space))) {
                 aot_set_last_error("create LLVM function type failed.");
                 goto fail;
             }
@@ -877,7 +877,7 @@ aot_compile_op_call(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
             if (!(func_ptr_type = LLVMPointerType(
                       func_ctxes[func_idx - import_func_count]->func_type,
-                      0))) {
+                        comp_ctx->target_address_space))) {
                 aot_set_last_error("construct func ptr type failed.");
                 goto fail;
             }
@@ -926,7 +926,7 @@ aot_compile_op_call(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
                     if (!(func_ptr_type = LLVMPointerType(
                               func_ctxes[func_idx - import_func_count]
                                   ->func_type,
-                              0))) {
+                                comp_ctx->target_address_space))) {
                         aot_set_last_error("construct func ptr type failed.");
                         goto fail;
                     }
@@ -999,6 +999,14 @@ aot_compile_op_call(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     }
 #endif
 
+#if WASM_ENABLE_THREAD_MGR != 0
+    /* Insert suspend check point */
+    if (comp_ctx->enable_thread_mgr) {
+        if (!check_suspend_flags(comp_ctx, func_ctx))
+            goto fail;
+    }
+#endif
+
     ret = true;
 fail:
     if (param_types)
@@ -1040,7 +1048,7 @@ call_aot_call_indirect_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     /* prepare function pointer */
     if (comp_ctx->is_jit_mode) {
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -1054,7 +1062,7 @@ call_aot_call_indirect_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     }
     else if (comp_ctx->is_indirect_mode) {
         int32 func_index;
-        if (!(func_ptr_type = LLVMPointerType(func_type, 0))) {
+        if (!(func_ptr_type = LLVMPointerType(func_type, comp_ctx->target_address_space))) {
             aot_set_last_error("create LLVM function type failed.");
             return false;
         }
@@ -1088,7 +1096,7 @@ call_aot_call_indirect_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     /* prepare frame_lp */
     for (i = 0; i < param_count; i++) {
         if (!(elem_idx = I32_CONST(cell_num))
-            || !(elem_ptr_type = LLVMPointerType(param_types[i], 0))) {
+            || !(elem_ptr_type = LLVMPointerType(param_types[i], comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add const or pointer type failed.");
             return false;
         }
@@ -1136,7 +1144,7 @@ call_aot_call_indirect_func(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     for (i = 0; i < result_count; i++) {
         ret_type = TO_LLVM_TYPE(wasm_ret_types[i]);
         if (!(ret_idx = I32_CONST(cell_num))
-            || !(ret_ptr_type = LLVMPointerType(ret_type, 0))) {
+            || !(ret_ptr_type = LLVMPointerType(ret_type, comp_ctx->target_address_space))) {
             aot_set_last_error("llvm add const or pointer type failed.");
             return false;
         }
@@ -1376,7 +1384,7 @@ aot_compile_op_call_indirect(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     for (i = 1; i < func_result_count; i++, j++) {
         param_types[j] = TO_LLVM_TYPE(func_type->types[func_param_count + i]);
-        if (!(param_types[j] = LLVMPointerType(param_types[j], 0))) {
+        if (!(param_types[j] = LLVMPointerType(param_types[j], comp_ctx->target_address_space))) {
             aot_set_last_error("llvm get pointer type failed.");
             goto fail;
         }
@@ -1583,7 +1591,7 @@ aot_compile_op_call_indirect(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 
     if (!(llvm_func_type =
               LLVMFunctionType(ret_type, param_types, total_param_count, false))
-        || !(llvm_func_ptr_type = LLVMPointerType(llvm_func_type, 0))) {
+        || !(llvm_func_ptr_type = LLVMPointerType(llvm_func_type, comp_ctx->target_address_space))) {
         aot_set_last_error("llvm add function type failed.");
         goto fail;
     }
@@ -1641,6 +1649,14 @@ aot_compile_op_call_indirect(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 #if (WASM_ENABLE_DUMP_CALL_STACK != 0) || (WASM_ENABLE_PERF_PROFILING != 0)
     if (comp_ctx->enable_aux_stack_frame) {
         if (!call_aot_free_frame_func(comp_ctx, func_ctx))
+            goto fail;
+    }
+#endif
+
+#if WASM_ENABLE_THREAD_MGR != 0
+    /* Insert suspend check point */
+    if (comp_ctx->enable_thread_mgr) {
+        if (!check_suspend_flags(comp_ctx, func_ctx))
             goto fail;
     }
 #endif
