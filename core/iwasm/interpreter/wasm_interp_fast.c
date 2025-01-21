@@ -1228,8 +1228,14 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0
     /* cache of label base addr - this is sentry on purecap, so need to unseal it to use as base */
     register uint8 *label_base = &&HANDLE_WASM_OP_UNREACHABLE;
+
 #if defined(__CHERI__) && ENABLE_CHERI_PURECAP
+/* WORKAROUND GCC TOOLCHAIN BUG - do not unseal if using GCC REF https://bugs.linaro.org/show_bug.cgi?id=6055 */
+#if defined(__clang__)
     label_base = cheri_unseal(label_base, cheri_offset_set(getauxptr(AT_CHERI_SEAL_CAP), CHERI_OTYPE_SENTRY));
+#endif
+/* (END) WORKAROUND GCC TOOLCHAIN BUG - do not unseal if using GCC REF https://bugs.linaro.org/show_bug.cgi?id=6055 */
+
 #endif
 #endif
 #endif
